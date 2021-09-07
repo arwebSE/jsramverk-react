@@ -6,9 +6,10 @@ import Editor from './Components/Editor';
 function App() {
     return (
         <div className="App">
-            <Router>
+            {/* <Router>
                 <Route exact path="/" component={Editor} />
-            </Router>
+            </Router> */}
+            <Editor />
         </div>
     );
 }

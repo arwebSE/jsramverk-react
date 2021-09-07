@@ -6,14 +6,14 @@ import 'bootstrap/dist/js/bootstrap.bundle.min.js';
 import { CKEditor } from '@ckeditor/ckeditor5-react';
 import ClassicEditor from '@ckeditor/ckeditor5-build-classic';
 
-class App extends Component {
+class Editor extends Component {
     handleSave() {
         console.log('Saved content:', this.state.data);
     }
 
     render() {
         return (
-            <div className="App">
+            <div className="Editor">
                 <div className="container">
                     <h1>Editor with "Save" function</h1>
 
@@ -86,4 +86,4 @@ class App extends Component {
     }
 }
 
-export default App;
+export default Editor;
