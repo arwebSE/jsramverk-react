@@ -54,6 +54,9 @@ class App extends Component {
                                         </ul>
                                     </li>
                                 </ul>
+                                <form class="d-flex">
+                                    <a className="nav-link btn btn-success" href="https://github.com/arwebSE/jsramverk-react"> GitHub</a>
+                                </form>
                             </div>
                         </div>
                     </nav>

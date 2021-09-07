@@ -40,6 +40,10 @@
     color: white !important;
 }
 
+.nav-link {
+    color: white !important;
+}
+
 @keyframes App-logo-spin {
     from {
         transform: rotate(0deg);
