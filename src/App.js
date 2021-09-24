@@ -1,11 +1,11 @@
 import './App.css';
 
-import { BrowserRouter as Router, Route } from 'react-router-dom';
-import Editor from './Components/Editor';
+// import { BrowserRouter as Router, Route } from 'react-router-dom';
+import Editor from './Components/Editor'
 
-function App() {
+const App = () => {
     return (
-        <div className="App">
+        <div className="container">
             {/* <Router>
                 <Route exact path="/" component={Editor} />
             </Router> */}
