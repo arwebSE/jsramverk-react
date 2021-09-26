@@ -24,6 +24,11 @@
     padding: 5%;
 }
 
+.ck-rounded-corners {
+    border-bottom-left-radius: 5px !important;
+    border-bottom-right-radius: 5px !important;
+}
+
 /* TOOLBAR */
 .toolbar {
     border-top-left-radius: 5px;
