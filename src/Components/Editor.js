@@ -7,6 +7,8 @@ import { FaGithub } from 'react-icons/fa'
 
 import { Modal, Button, DropdownButton, Dropdown, Table, InputGroup, FormControl } from 'react-bootstrap'
 
+let apiUrl = "https://jsramverk-editor-auro17.azurewebsites.net"
+
 class Editor extends Component {
     constructor(props) {
         super(props);
@@ -28,7 +30,7 @@ class Editor extends Component {
     }
 
     refreshList = () => {
-        fetch("https://jsramverk-editor-auro17.azurewebsites.net/docs/list")
+        fetch(`${apiUrl}/docs/list`)
             .then(res => res.json())
             .then(
                 (result) => {
@@ -53,7 +55,7 @@ class Editor extends Component {
 
     createDocument = () => {
         console.log("CREATED:", this.state.newDocName)
-        fetch('https://jsramverk-editor-auro17.azurewebsites.net/docs/create', {
+        fetch(`${apiUrl}/docs/create`, {
             method: 'POST', // or 'PUT'
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ "name": this.state.newDocName, "content": "" }),
@@ -74,7 +76,7 @@ class Editor extends Component {
         let docBody = JSON.stringify({ "name": doc.name, "content": this.state.editData })
         console.log("doc:", doc, "body:", docBody);
 
-        fetch('https://jsramverk-editor-auro17.azurewebsites.net/docs/update', {
+        fetch(`${apiUrl}/docs/update`, {
             method: 'POST', // or 'PUT'
             headers: { 'Content-Type': 'application/json' },
             body: docBody,
@@ -90,7 +92,7 @@ class Editor extends Component {
 
     resetDB = () => {
         console.log("RESETTING DB")
-        fetch("https://jsramverk-editor-auro17.azurewebsites.net/docs/reset")
+        fetch(`${apiUrl}/docs/reset`)
             .then(res => res.json())
             .then(
                 (result) => {
@@ -125,7 +127,7 @@ class Editor extends Component {
 
         return (
             <div className="Editor">
-                <h1>Editor with "Save" function</h1>
+                <h1>AuroDocs™</h1>
 
                 <nav className="toolbar navbar navbar-expand-lg navbar-dark bg-dark">
                     <div className="container-fluid">
