@@ -1,13 +1,14 @@
 import React, { Component } from 'react';
+import { CKEditor } from "@ckeditor/ckeditor5-react";
+import ClassicEditor from "@ckeditor/ckeditor5-build-classic";
+import { FaGithub } from 'react-icons/fa';
+import { Modal, Button, DropdownButton, Dropdown, Table, InputGroup, FormControl, Nav, Navbar, Container } from 'react-bootstrap';
+import socketIOClient from "socket.io-client";
 
-import { CKEditor } from '@ckeditor/ckeditor5-react';
-import ClassicEditor from '@ckeditor/ckeditor5-build-classic';
+/* const apiUrl = "https://jsramverk-editor-auro17.azurewebsites.net" */
 
-import { FaGithub } from 'react-icons/fa'
-
-import { Modal, Button, DropdownButton, Dropdown, Table, InputGroup, FormControl } from 'react-bootstrap'
-
-let apiUrl = "https://jsramverk-editor-auro17.azurewebsites.net"
+const apiUrl = "http://localhost:1337"
+const socket = socketIOClient(apiUrl);
 
 class Editor extends Component {
     constructor(props) {
@@ -104,6 +105,11 @@ class Editor extends Component {
             )
     }
 
+    testSocket = () => {
+        console.log("Testing socket...")
+        socket.emit("message", "Testing!!!")
+    }
+
     selectDoc = (e, docid) => {
         e.preventDefault(); // prevents firing before click
         let doc = this.state.documents.find(x => x._id === docid)
@@ -127,45 +133,50 @@ class Editor extends Component {
 
         return (
             <div className="Editor">
-                <h1>AuroDocs™</h1>
-
-                <nav className="toolbar navbar navbar-expand-lg navbar-dark bg-dark">
-                    <div className="container-fluid">
-                        <button className="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarSupportedContent" aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
-                            <span className="navbar-toggler-icon"></span>
-                        </button>
-                        <div className="collapse navbar-collapse" id="navbarSupportedContent">
-                            <ul className="navbar-nav me-auto mb-2 mb-lg-0">
+                <Navbar bg="dark" variant="dark" className="toolbar">
+                    <Container>
+                        <Navbar.Brand href="#home" className="justify-content-center">
+                            <img src="logo.png" width="30" height="30"
+                                className="d-inline-block align-top" alt="AuroDocs logo"
+                            /> AuroDocs™
+                        </Navbar.Brand>
+                        <Navbar.Toggle aria-controls="basic-navbar-nav" />
+                        <Navbar.Collapse id="basic-navbar-nav">
+                            
+                            <Nav className="me-auto">
                                 <DropdownButton title="File">
                                     <Dropdown.Item onClick={this.showNewModal}>New</Dropdown.Item>
                                     <Dropdown.Item onClick={this.showOpenModal}>Open...</Dropdown.Item>
                                     <Dropdown.Item onClick={this.saveContent}>Save</Dropdown.Item>
+                                    <Dropdown.Item onClick={this.testSocket}>Test Socket</Dropdown.Item>
                                 </DropdownButton>
                                 <DropdownButton title="Edit" variant="secondary"> </DropdownButton>
                                 <DropdownButton title="View" variant="secondary"> </DropdownButton>
                                 <DropdownButton title="Help" variant="info">
                                     <Dropdown.Item onClick={this.resetDB}>Reset Database</Dropdown.Item>
                                 </DropdownButton>
-                            </ul>
-                            <form className="d-flex">
-                                <Button variant="success" href="https://github.com/arwebSE/jsramverk-react">GitHub <FaGithub /></Button>
-                            </form>
+                            </Nav>
+                        </Navbar.Collapse>
+                        
+                        <div className="justify-content-end">
+                            <Button variant="success" href="https://github.com/arwebSE/jsramverk-react">GitHub <FaGithub /></Button>
                         </div>
-                    </div>
-                </nav>
+                    </Container>
+                </Navbar>
 
-                <CKEditor
-                    editor={ClassicEditor}
-                    data={loadData}
-                    onChange={(event, editor) => { this.setState({ editData: editor.getData() }) }}
-                />
+                <Container>
+                    <CKEditor
+                        editor={ClassicEditor}
+                        data={loadData}
+                        onChange={(event, editor) => { this.setState({ editData: editor.getData() }) }}
+                    />
+                </Container>
 
                 <Modal show={openModalShown} onHide={this.hideOpenModal}>
                     <Modal.Header closeButton>
                         <Modal.Title>Open Document</Modal.Title>
                     </Modal.Header>
                     <Modal.Body>
-
                         <Table striped hover>
                             {!apiLoaded && "Loading..."}
                             {apiLoaded &&

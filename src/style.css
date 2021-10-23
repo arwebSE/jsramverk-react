@@ -1,0 +1,94 @@
+*,
+*::before,
+*::after {
+    box-sizing: border-box !important;
+}
+
+body {
+    background-color: #f3f3f3 !important;
+    margin: 0 !important;
+}
+
+
+/* TOOLBAR */
+
+.ck-editor__top {
+    background-color: #f3f3f3;
+}
+
+.ck.ck-toolbar {
+    box-shadow: 0 0 5px 0 rgba(0, 0, 0, 0.5) !important;
+    border: 0 !important;
+    border-top-left-radius: 0 !important;
+    border-top-right-radius: 0 !important;
+    border-bottom-left-radius: 5px !important;
+    border-bottom-right-radius: 5px !important;
+}
+
+.dropdown-toggle {
+    margin: 5px;
+    color: white !important;
+}
+
+.nav-link {
+    color: white !important;
+}
+
+.btn-info {
+    background-color: #04719c;
+}
+
+
+/* TOOLBAR END */
+
+.ck-editor__main {
+    border: none;
+    display: flex !important;
+    justify-content: center;
+}
+
+.ck-content {
+    width: 21cm;
+    min-height: 30cm;
+    border-radius: 2px;
+    padding: 2cm !important;
+    margin: 1rem !important;
+    box-shadow: 0 0 5px 0 rgba(0, 0, 0, 0.5);
+    background-color: white;
+    border: 0 !important;
+    border-radius: 2px !important;
+}
+
+.ck-focused {
+    border: 0 !important;
+    box-shadow: 0 0 5px 0 rgba(39, 83, 141, 0.5) !important;
+}
+
+
+/* PRINT STYLES */
+
+@page {
+    margin: 2cm;
+}
+
+@media print {
+    body {
+        background: none !important;
+    }
+    .ck-content,
+    .ck-focused {
+        width: 17cm !important;
+        height: 26cm !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        box-shadow: none !important;
+        align-self: flex-start !important;
+    }
+    .toolbar,
+    .ck.ck-toolbar {
+        display: none !important;
+    }
+}
+
+
+/* PRINT STYLES end*/
