@@ -15,7 +15,7 @@
                     "name": "API Backend",
                     "commands": [
                         "cd ../api",
-                        "yarn start"
+                        "yarn watch"
                     ]
                 }
             ]
