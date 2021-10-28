@@ -1,5 +1,24 @@
 {
     "files.associations": {
         "*.js": "javascriptreact"
-    }
+    },
+    "restoreTerminals.terminals": [
+        {
+            "splitTerminals": [
+                {
+                    "name": "React Dev",
+                    "commands": [
+                        "yarn start"
+                    ]
+                },
+                {
+                    "name": "API Backend",
+                    "commands": [
+                        "cd ../api",
+                        "yarn start"
+                    ]
+                }
+            ]
+        }
+    ]
 }

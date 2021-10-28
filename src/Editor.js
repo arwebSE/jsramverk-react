@@ -1,6 +1,8 @@
 import React, { Component } from 'react';
-import { CKEditor } from "@ckeditor/ckeditor5-react";
-import ClassicEditor from "@ckeditor/ckeditor5-build-classic";
+/* import { CKEditor } from "@ckeditor/ckeditor5-react";
+import ClassicEditor from "@ckeditor/ckeditor5-build-classic"; */
+import ReactQuill, { Quill } from 'react-quill';
+import 'react-quill/dist/quill.snow.css';
 import { FaGithub } from 'react-icons/fa';
 import { Modal, Button, DropdownButton, Dropdown, Table, InputGroup, FormControl, Nav, Navbar, Container } from 'react-bootstrap';
 import socketIOClient from "socket.io-client";
@@ -8,11 +10,12 @@ import socketIOClient from "socket.io-client";
 /* const apiUrl = "https://jsramverk-editor-auro17.azurewebsites.net" */
 
 const apiUrl = "http://localhost:1337"
-const socket = socketIOClient(apiUrl);
 
 class Editor extends Component {
     constructor(props) {
         super(props);
+        this.quillRef = null;      // Quill instance
+        this.reactQuillRef = null; // ReactQuill component
         this.state = {
             error: null,
             apiLoaded: false,
@@ -22,12 +25,68 @@ class Editor extends Component {
             selectedDoc: null,
             editData: null,
             loadData: null,
-            newDocName: null
+            newDocName: null,
+            socket: null
         }
-        this.showOpenModal = this.showOpenModal.bind(this)
-        this.hideOpenModal = this.hideOpenModal.bind(this)
-        this.showNewModal = this.showNewModal.bind(this)
-        this.hideNewModal = this.hideNewModal.bind(this)
+    }
+
+    modules = {
+        toolbar: [
+            [{ 'header': [1, 2, 3, 4, false] }],
+            [{ 'font': [] }],
+            ['bold', 'italic', 'underline', 'strike', 'blockquote'],
+            [{ 'list': 'ordered' }, { 'list': 'bullet' }, { 'indent': '-1' }, { 'indent': '+1' }],
+            [{ 'color': [] }, { 'background': [] }],
+            [{ 'script': "sub" }, { 'script': "super" }],
+            [{ 'align': [] }],
+            ['image', 'link', "blockquote", "code-block"],
+            ['clean']
+        ],
+    }
+
+    formats = [
+        'header',
+        'bold', 'italic', 'underline', 'strike', 'blockquote',
+        'list', 'bullet', 'indent',
+        'link', 'image'
+    ]
+
+    /* COMPONENT LIFECYCLE */
+
+    componentDidMount() {
+        this.attachQuillRefs()
+        this.refreshList()
+
+        const s = socketIOClient(apiUrl)
+        this.setState({ socket: s })
+    }
+
+    componentWillUnmount() {
+        this.state.socket.disconnect()
+    }
+
+    componentDidUpdate() {
+        this.attachQuillRefs()
+    }
+
+    /* MISC FUNCTIONS */
+
+    attachQuillRefs = () => {
+        if (typeof this.reactQuillRef.getEditor !== 'function') return;
+        this.quillRef = this.reactQuillRef.getEditor();
+    }
+
+    getQuillContent = () => {
+        var delta = this.quillRef.getContents();
+        var text = this.quillRef.getText();
+        var html = this.quillRef.root.innerHTML;
+        console.log(html);
+        return html;
+    }
+
+    handleChange = () => {
+        var html = this.quillRef.root.innerHTML;
+        console.log("Changed data to:", html);
     }
 
     refreshList = () => {
@@ -43,10 +102,6 @@ class Editor extends Component {
                     console.log("API fetch error:", error);
                 }
             )
-    }
-
-    componentDidMount() {
-        this.refreshList()
     }
 
     showOpenModal = () => { this.setState({ openModalShown: true }); this.refreshList() }
@@ -72,9 +127,11 @@ class Editor extends Component {
     }
 
     saveContent = () => {
-        console.log("SAVING:", this.state.editData)
+        // let saveData = this.state.editData;
+        let saveData = this.getQuillContent();
+        console.log("SAVING:", saveData)
         let doc = this.state.selectedDoc
-        let docBody = JSON.stringify({ "name": doc.name, "content": this.state.editData })
+        let docBody = JSON.stringify({ "name": doc.name, "content": saveData })
         console.log("doc:", doc, "body:", docBody);
 
         fetch(`${apiUrl}/docs/update`, {
@@ -107,7 +164,7 @@ class Editor extends Component {
 
     testSocket = () => {
         console.log("Testing socket...")
-        socket.emit("message", "Testing!!!")
+        this.state.socket.emit("message", "Testing!!!")
     }
 
     selectDoc = (e, docid) => {
@@ -142,7 +199,7 @@ class Editor extends Component {
                         </Navbar.Brand>
                         <Navbar.Toggle aria-controls="basic-navbar-nav" />
                         <Navbar.Collapse id="basic-navbar-nav">
-                            
+
                             <Nav className="me-auto">
                                 <DropdownButton title="File">
                                     <Dropdown.Item onClick={this.showNewModal}>New</Dropdown.Item>
@@ -151,13 +208,15 @@ class Editor extends Component {
                                     <Dropdown.Item onClick={this.testSocket}>Test Socket</Dropdown.Item>
                                 </DropdownButton>
                                 <DropdownButton title="Edit" variant="secondary"> </DropdownButton>
-                                <DropdownButton title="View" variant="secondary"> </DropdownButton>
+                                <DropdownButton title="View" variant="secondary">
+                                    <Dropdown.Item onClick={e => this.getQuillContent(e)}>Print content to Console</Dropdown.Item>
+                                </DropdownButton>
                                 <DropdownButton title="Help" variant="info">
                                     <Dropdown.Item onClick={this.resetDB}>Reset Database</Dropdown.Item>
                                 </DropdownButton>
                             </Nav>
                         </Navbar.Collapse>
-                        
+
                         <div className="justify-content-end">
                             <Button variant="success" href="https://github.com/arwebSE/jsramverk-react">GitHub <FaGithub /></Button>
                         </div>
@@ -165,11 +224,22 @@ class Editor extends Component {
                 </Navbar>
 
                 <Container>
-                    <CKEditor
+                    {/* <CKEditor
                         editor={ClassicEditor}
                         data={loadData}
                         onChange={(event, editor) => { this.setState({ editData: editor.getData() }) }}
+                    /> */}
+
+                    <ReactQuill
+                        ref={(el) => { this.reactQuillRef = el }}
+                        theme={'snow'}
+                        modules={this.modules}
+                        formats={this.formats}
+                        value={loadData}
+                        onChange={this.handleChange}
                     />
+
+
                 </Container>
 
                 <Modal show={openModalShown} onHide={this.hideOpenModal}>
