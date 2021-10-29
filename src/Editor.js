@@ -1,19 +1,18 @@
 import React, { Component } from 'react';
-/* import { CKEditor } from "@ckeditor/ckeditor5-react";
-import ClassicEditor from "@ckeditor/ckeditor5-build-classic"; */
-import ReactQuill, { Quill } from 'react-quill';
+import ReactQuill from 'react-quill';
 import 'react-quill/dist/quill.snow.css';
 import { FaGithub } from 'react-icons/fa';
 import { Modal, Button, DropdownButton, Dropdown, Table, InputGroup, FormControl, Nav, Navbar, Container } from 'react-bootstrap';
 import socketIOClient from "socket.io-client";
 
 /* const apiUrl = "https://jsramverk-editor-auro17.azurewebsites.net" */
-
 const apiUrl = "http://localhost:1337"
+const SAVE_INTERVAL = 2000
 
 class Editor extends Component {
     constructor(props) {
         super(props);
+        this.docid = props.match.params.id;
         this.quillRef = null;      // Quill instance
         this.reactQuillRef = null; // ReactQuill component
         this.state = {
@@ -24,7 +23,6 @@ class Editor extends Component {
             newModalShown: false,
             selectedDoc: null,
             editData: null,
-            loadData: null,
             newDocName: null,
             socket: null
         }
@@ -54,43 +52,97 @@ class Editor extends Component {
     /* COMPONENT LIFECYCLE */
 
     componentDidMount() {
+        // Attaching Quill
         this.attachQuillRefs()
+
+        this.quillRef.disable();
+        this.quillRef.setText("Loading...");
+
+        // Refreshing doc list from DB
         this.refreshList()
 
+        // Attaching socket
         const s = socketIOClient(apiUrl)
         this.setState({ socket: s })
+
+        this.receiveChanges(); // Receive realtime changes to document
+        this.openDocument(this.docid); // Open document based off route
+        this.autoSave(); // Setup autosave
     }
 
     componentWillUnmount() {
         this.state.socket.disconnect()
+        console.log("Disconnected from server.");
     }
 
     componentDidUpdate() {
         this.attachQuillRefs()
     }
 
-    /* MISC FUNCTIONS */
+    /* HELPER FUNCTIONS */
 
     attachQuillRefs = () => {
         if (typeof this.reactQuillRef.getEditor !== 'function') return;
         this.quillRef = this.reactQuillRef.getEditor();
     }
 
-    getQuillContent = () => {
-        var delta = this.quillRef.getContents();
-        var text = this.quillRef.getText();
-        var html = this.quillRef.root.innerHTML;
-        console.log(html);
-        return html;
+    receiveChanges() {
+        if (this.state.socket == null || this.quillRef == null) { return }
+        this.state.socket.on("receive-changes", delta => {
+            this.quillRef.updateContents(delta);
+        })
     }
 
-    handleChange = () => {
-        var html = this.quillRef.root.innerHTML;
-        console.log("Changed data to:", html);
+    openDocument(docid) {
+        if (this.state.socket == null || this.quillRef == null) { return }
+        this.state.socket.once("load-document", document => {
+            this.quillRef.setContents(document);
+            this.quillRef.enable();
+        })
+
+        this.state.socket.emit("get-document", docid)
     }
 
-    refreshList = () => {
-        fetch(`${apiUrl}/docs/list`)
+    createDocument(e = null, name) {
+        if (e) { e.preventDefault(); }
+        if (this.state.socket == null || this.quillRef == null) { return }
+        this.state.socket.once("created-document", document => {
+            console.log("received created document with name:", document.name);
+            console.log("opening newly created doc");
+            this.openDocument(document._id)
+        })
+        console.log("sending request to create doc with name:", name);
+        this.state.socket.emit("create-document", this.docid, name)
+    }
+
+    autoSave() {
+        if (this.state.socket == null || this.quillRef == null) { return }
+        const interval = setInterval(() => {
+            this.state.socket.emit("save-document", this.quillRef.getContents())
+        }, SAVE_INTERVAL)
+        return () => {
+            clearInterval(interval)
+        }
+    }
+
+    /* MISC FUNCTIONS */
+
+    printEditData = (e) => {
+        e.preventDefault();
+        console.log("Data:", this.state.editData)
+    }
+
+    handleChange = (html, delta, source, editor) => {
+        // Making sure socket and Quill are attached
+        if (this.state.socket == null || this.quillRef == null) { return }
+        if (source !== "user") { return } // Prevent changes not made by user
+        //console.log("Changed data to:", html);
+        this.setState({ editData: html });
+        this.state.socket.emit("send-changes", delta);
+    }
+
+    refreshList() {
+        /* fetch(`${apiUrl}/docs/list`)
             .then(res => res.json())
             .then(
                 (result) => {
@@ -101,7 +153,15 @@ class Editor extends Component {
                     this.setState({ apiLoaded: true, error })
                     console.log("API fetch error:", error);
                 }
-            )
+            ) */
+        console.log("refreshlist invoked");
+        if (this.state.socket == null || this.quillRef == null) { return }
+        this.state.socket.once("listed-documents", docs => {
+            console.log("loaded docs", docs);
+            this.setState({ documents: docs })
+        })
+        console.log("socket n quill not null");
+        this.state.socket.emit("list-documents", "asd")
     }
 
     showOpenModal = () => { this.setState({ openModalShown: true }); this.refreshList() }
@@ -109,6 +169,7 @@ class Editor extends Component {
     showNewModal = () => { this.setState({ newModalShown: true }) }
     hideNewModal = () => { this.setState({ newModalShown: false }) }
 
+    /*  
     createDocument = () => {
         console.log("CREATED:", this.state.newDocName)
         fetch(`${apiUrl}/docs/create`, {
@@ -124,29 +185,33 @@ class Editor extends Component {
             .catch((error) => {
                 console.error('CREATE ERROR:', error);
             });
-    }
+    } */
 
-    saveContent = () => {
-        // let saveData = this.state.editData;
-        let saveData = this.getQuillContent();
-        console.log("SAVING:", saveData)
-        let doc = this.state.selectedDoc
-        let docBody = JSON.stringify({ "name": doc.name, "content": saveData })
-        console.log("doc:", doc, "body:", docBody);
+    /* saveContent = () => {
+        let editData = this.state.editData;
+        console.log("SAVING:", editData)
+        if (this.state.selectedDoc) {
+            let doc = this.state.selectedDoc
+            let docBody = JSON.stringify({ "name": doc.name, "content": editData })
+            console.log("doc:", doc, "body:", docBody);
 
-        fetch(`${apiUrl}/docs/update`, {
-            method: 'POST', // or 'PUT'
-            headers: { 'Content-Type': 'application/json' },
-            body: docBody,
-        })
-            .then(response => response.json())
-            .then(data => {
-                console.log('Success:', data);
+            fetch(`${apiUrl}/docs/update`, {
+                method: 'POST', // or 'PUT'
+                headers: { 'Content-Type': 'application/json' },
+                body: docBody,
             })
-            .catch((error) => {
-                console.error('Error:', error);
-            });
-    }
+                .then(response => response.json())
+                .then(data => {
+                    console.log('Success:', data);
+                })
+                .catch((error) => {
+                    console.error('Error:', error);
+                });
+        } else {
+            console.log("No doc opened!");
+            return;
+        }
+    } */
 
     resetDB = () => {
         console.log("RESETTING DB")
@@ -172,7 +237,7 @@ class Editor extends Component {
         let doc = this.state.documents.find(x => x._id === docid)
         this.setState({ selectedDoc: doc })
         console.log('Selected doc:', doc)
-        this.setState({ loadData: doc.content })
+        this.setState({ editData: doc.content })
     }
 
     getDocContent() {
@@ -182,7 +247,7 @@ class Editor extends Component {
     }
 
     render() {
-        const { error, documents, openModalShown, newModalShown, loadData, apiLoaded } = this.state;
+        const { error, documents, openModalShown, newModalShown, editData, apiLoaded, newDocName } = this.state;
 
         if (error) {
             console.log("Error:", error.message)
@@ -199,7 +264,6 @@ class Editor extends Component {
                         </Navbar.Brand>
                         <Navbar.Toggle aria-controls="basic-navbar-nav" />
                         <Navbar.Collapse id="basic-navbar-nav">
-
                             <Nav className="me-auto">
                                 <DropdownButton title="File">
                                     <Dropdown.Item onClick={this.showNewModal}>New</Dropdown.Item>
@@ -209,7 +273,7 @@ class Editor extends Component {
                                 </DropdownButton>
                                 <DropdownButton title="Edit" variant="secondary"> </DropdownButton>
                                 <DropdownButton title="View" variant="secondary">
-                                    <Dropdown.Item onClick={e => this.getQuillContent(e)}>Print content to Console</Dropdown.Item>
+                                    <Dropdown.Item onClick={e => this.printEditData(e)}>Print content to Console</Dropdown.Item>
                                 </DropdownButton>
                                 <DropdownButton title="Help" variant="info">
                                     <Dropdown.Item onClick={this.resetDB}>Reset Database</Dropdown.Item>
@@ -224,22 +288,14 @@ class Editor extends Component {
                 </Navbar>
 
                 <Container>
-                    {/* <CKEditor
-                        editor={ClassicEditor}
-                        data={loadData}
-                        onChange={(event, editor) => { this.setState({ editData: editor.getData() }) }}
-                    /> */}
-
                     <ReactQuill
                         ref={(el) => { this.reactQuillRef = el }}
                         theme={'snow'}
                         modules={this.modules}
                         formats={this.formats}
-                        value={loadData}
+                        value={editData}
                         onChange={this.handleChange}
                     />
-
-
                 </Container>
 
                 <Modal show={openModalShown} onHide={this.hideOpenModal}>
@@ -278,7 +334,7 @@ class Editor extends Component {
                         </InputGroup>
                     </Modal.Body>
                     <Modal.Footer>
-                        <Button variant="primary" onClick={this.createDocument}>Save</Button>
+                        <Button variant="primary" onClick={(e) => this.createDocument(e, newDocName)}>Save</Button>
                         <Button variant="secondary" onClick={this.hideNewModal}>Close</Button>
                     </Modal.Footer>
                 </Modal>
