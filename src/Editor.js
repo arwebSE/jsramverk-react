@@ -4,6 +4,7 @@ import 'react-quill/dist/quill.snow.css';
 import { FaGithub } from 'react-icons/fa';
 import { Modal, Button, DropdownButton, Dropdown, Table, InputGroup, FormControl, Nav, Navbar, Container } from 'react-bootstrap';
 import socketIOClient from "socket.io-client";
+import { BrowserRouter as Redirect } from 'react-router-dom';
 
 /* const apiUrl = "https://jsramverk-editor-auro17.azurewebsites.net" */
 const apiUrl = "http://localhost:1337"
@@ -59,7 +60,7 @@ class Editor extends Component {
         this.quillRef.setText("Loading...");
 
         // Refreshing doc list from DB
-        this.refreshList()
+        this.listDocuments()
 
         // Attaching socket
         const s = socketIOClient(apiUrl)
@@ -71,7 +72,9 @@ class Editor extends Component {
     }
 
     componentWillUnmount() {
-        this.state.socket.disconnect()
+        if (this.state.socket == null) { return }
+        //this.state.socket.removeAllListeners();
+        this.state.socket.disconnect();
         console.log("Disconnected from server.");
     }
 
@@ -87,25 +90,34 @@ class Editor extends Component {
     }
 
     receiveChanges() {
-        if (this.state.socket == null || this.quillRef == null) { return }
+        if (this.state.socket == null || this.quillRef == null) return;
         this.state.socket.on("receive-changes", delta => {
+            console.log("client received changes");
             this.quillRef.updateContents(delta);
         })
     }
 
-    openDocument(docid) {
-        if (this.state.socket == null || this.quillRef == null) { return }
-        this.state.socket.once("load-document", document => {
-            this.quillRef.setContents(document);
+    openDocument = (docid, e = null) => {
+        if (e) e.preventDefault();
+        if (this.state.socket == null || this.quillRef == null) return;
+        if (docid !== this.props.match.params.id) { // if on wrong url
+            console.log("redirecting to correct url");
+            this.props.history.push(`/docs/${docid}`)
+        }
+        this.state.socket.once("load-document", content => {
+            console.log("received doc content:", content);
+            this.quillRef.setContents(content);
             this.quillRef.enable();
+            this.setState({ selectedDoc: docid })
         })
-
+        console.log("requesting to open doc:", docid);
         this.state.socket.emit("get-document", docid)
+
     }
 
-    createDocument(e = null, name) {
-        if (e) { e.preventDefault(); }
-        if (this.state.socket == null || this.quillRef == null) { return }
+    createDocument = (name, e = null) => {
+        if (e) e.preventDefault();
+        if (this.state.socket == null) { return }
         this.state.socket.once("created-document", document => {
             console.log("received created document with name:", document.name);
             console.log("opening newly created doc");
@@ -115,10 +127,18 @@ class Editor extends Component {
         this.state.socket.emit("create-document", this.docid, name)
     }
 
-    autoSave() {
-        if (this.state.socket == null || this.quillRef == null) { return }
+    saveDocument = (e = null) => {
+        if (e) e.preventDefault();
+        if (this.state.socket == null || this.quillRef == null) return;
+        this.state.socket.emit("save-document", this.quillRef.getContents())
+        console.log("Saved! Timestamp:", Date.now(), "static delta:", this.quillRef.getContents());
+    }
+
+    autoSave = () => {
+        if (this.state.socket == null || this.quillRef == null) return;
         const interval = setInterval(() => {
-            this.state.socket.emit("save-document", this.quillRef.getContents())
+            this.saveDocument()
+            console.log("Autosaved!");
         }, SAVE_INTERVAL)
         return () => {
             clearInterval(interval)
@@ -127,124 +147,50 @@ class Editor extends Component {
 
     /* MISC FUNCTIONS */
 
-    printEditData = (e) => {
-        e.preventDefault();
+    printEditData = (e = null) => {
+        if (e) e.preventDefault();
         console.log("Data:", this.state.editData)
     }
 
     handleChange = (html, delta, source, editor) => {
         // Making sure socket and Quill are attached
-        if (this.state.socket == null || this.quillRef == null) { return }
-        if (source !== "user") { return } // Prevent changes not made by user
-        //console.log("Changed data to:", html);
+        if (this.state.socket == null || this.quillRef == null) return;
+        if (source !== "user") return; // Prevent changes not made by user
         this.setState({ editData: html });
+        console.log("attempting to send changes delta:", delta);
+        this.state.socket.on("saved-status", (status) => {
+            console.log("received save status:", status)
+        })
         this.state.socket.emit("send-changes", delta);
     }
 
-    refreshList() {
-        /* fetch(`${apiUrl}/docs/list`)
-            .then(res => res.json())
-            .then(
-                (result) => {
-                    this.setState({ apiLoaded: true, documents: result })
-                    console.log("API data fethed successfully!");
-                },
-                (error) => {
-                    this.setState({ apiLoaded: true, error })
-                    console.log("API fetch error:", error);
-                }
-            ) */
-        console.log("refreshlist invoked");
-        if (this.state.socket == null || this.quillRef == null) { return }
+    listDocuments() {
+        console.log("refresh list invoked");
+        if (this.state.socket == null) return;
         this.state.socket.once("listed-documents", docs => {
             console.log("loaded docs", docs);
-            this.setState({ documents: docs })
+            this.setState({ documents: docs, apiLoaded: true })
         })
         console.log("socket n quill not null");
         this.state.socket.emit("list-documents", "asd")
     }
 
-    showOpenModal = () => { this.setState({ openModalShown: true }); this.refreshList() }
+    resetDB = (e = null) => {
+        if (e) e.preventDefault();
+        console.log("RESET invoked");
+        if (this.state.socket == null) return;
+        this.state.socket.on("resetdb", () => {
+            console.log("successfully reset db!")
+        })
+        this.state.socket.emit("resetdb")
+    }
+
+    /* MODAL TOGGLES */
+    showOpenModal = () => { this.setState({ openModalShown: true }); this.listDocuments() }
     hideOpenModal = () => { this.setState({ openModalShown: false }) }
     showNewModal = () => { this.setState({ newModalShown: true }) }
     hideNewModal = () => { this.setState({ newModalShown: false }) }
-
-    /*  
-    createDocument = () => {
-        console.log("CREATED:", this.state.newDocName)
-        fetch(`${apiUrl}/docs/create`, {
-            method: 'POST', // or 'PUT'
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ "name": this.state.newDocName, "content": "" }),
-        })
-            .then(response => response.json())
-            .then(data => {
-                console.log('CREATE SUCCESS:', data);
-                this.setState({ newModalShown: false })
-            })
-            .catch((error) => {
-                console.error('CREATE ERROR:', error);
-            });
-    } */
-
-    /* saveContent = () => {
-        let editData = this.state.editData;
-        console.log("SAVING:", editData)
-        if (this.state.selectedDoc) {
-            let doc = this.state.selectedDoc
-            let docBody = JSON.stringify({ "name": doc.name, "content": editData })
-            console.log("doc:", doc, "body:", docBody);
-
-            fetch(`${apiUrl}/docs/update`, {
-                method: 'POST', // or 'PUT'
-                headers: { 'Content-Type': 'application/json' },
-                body: docBody,
-            })
-                .then(response => response.json())
-                .then(data => {
-                    console.log('Success:', data);
-                })
-                .catch((error) => {
-                    console.error('Error:', error);
-                });
-        } else {
-            console.log("No doc opened!");
-            return;
-        }
-    } */
-
-    resetDB = () => {
-        console.log("RESETTING DB")
-        fetch(`${apiUrl}/docs/reset`)
-            .then(res => res.json())
-            .then(
-                (result) => {
-                    console.log("DB Reset successfully:", result);
-                },
-                (error) => {
-                    console.log("Reset error:", error);
-                }
-            )
-    }
-
-    testSocket = () => {
-        console.log("Testing socket...")
-        this.state.socket.emit("message", "Testing!!!")
-    }
-
-    selectDoc = (e, docid) => {
-        e.preventDefault(); // prevents firing before click
-        let doc = this.state.documents.find(x => x._id === docid)
-        this.setState({ selectedDoc: doc })
-        console.log('Selected doc:', doc)
-        this.setState({ editData: doc.content })
-    }
-
-    getDocContent() {
-        let docid = this.state.selectedDoc
-        let doc = this.state.documents[docid]
-        return doc.content
-    }
+    /* MODAL TOGGLES END */
 
     render() {
         const { error, documents, openModalShown, newModalShown, editData, apiLoaded, newDocName } = this.state;
@@ -268,8 +214,7 @@ class Editor extends Component {
                                 <DropdownButton title="File">
                                     <Dropdown.Item onClick={this.showNewModal}>New</Dropdown.Item>
                                     <Dropdown.Item onClick={this.showOpenModal}>Open...</Dropdown.Item>
-                                    <Dropdown.Item onClick={this.saveContent}>Save</Dropdown.Item>
-                                    <Dropdown.Item onClick={this.testSocket}>Test Socket</Dropdown.Item>
+                                    <Dropdown.Item onClick={this.saveDocument}>Save</Dropdown.Item>
                                 </DropdownButton>
                                 <DropdownButton title="Edit" variant="secondary"> </DropdownButton>
                                 <DropdownButton title="View" variant="secondary">
@@ -303,20 +248,20 @@ class Editor extends Component {
                         <Modal.Title>Open Document</Modal.Title>
                     </Modal.Header>
                     <Modal.Body>
-                        <Table striped hover>
-                            {!apiLoaded && "Loading..."}
-                            {apiLoaded &&
-                                <tbody>{documents.map(item =>
-                                    <tr key={item._id}>
+                        {!apiLoaded && "Loading..."}
+                        {apiLoaded &&
+                            <Table striped hover>
+                                <tbody>{documents.map(document =>
+                                    <tr key={document._id}>
                                         <td>
-                                            <Button variant="link" value={item._id} onClick={e => this.selectDoc(e, item._id)}>
-                                                {item.name} (ID: {item._id})
+                                            <Button variant="link" value={document._id} onClick={e => { this.openDocument(document._id, e); this.hideOpenModal(); }}>
+                                                {document.name} (ID: {document._id})
                                             </Button>
                                         </td>
                                     </tr>)
                                 }</tbody>
-                            }
-                        </Table>
+                            </Table>
+                        }
                     </Modal.Body>
                     <Modal.Footer>
                         <Button variant="primary" onClick={this.hideOpenModal}>Close</Button>
@@ -334,7 +279,7 @@ class Editor extends Component {
                         </InputGroup>
                     </Modal.Body>
                     <Modal.Footer>
-                        <Button variant="primary" onClick={(e) => this.createDocument(e, newDocName)}>Save</Button>
+                        <Button variant="primary" onClick={(e) => { this.createDocument(newDocName, e); this.hideNewModal(); }}>Save</Button>
                         <Button variant="secondary" onClick={this.hideNewModal}>Close</Button>
                     </Modal.Footer>
                 </Modal>
