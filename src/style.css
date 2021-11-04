@@ -48,8 +48,21 @@ body {
     background-color: #04719c;
 }
 
-
 /* TOOLBAR END */
+
+/* ALERTS */
+
+.alert {
+    position: fixed;
+    top: 30%;
+    z-index: 2;
+    margin: 0 auto;
+    left: 50%;
+    min-width: 300px;
+    margin-left: -150px;
+}
+
+/* EDITOR MAIN*/ 
 
 .ck-editor__main,
 .ql-container.ql-snow {

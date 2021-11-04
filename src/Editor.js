@@ -2,30 +2,32 @@ import React, { Component } from 'react';
 import ReactQuill from 'react-quill';
 import 'react-quill/dist/quill.snow.css';
 import { FaGithub } from 'react-icons/fa';
-import { Modal, Button, DropdownButton, Dropdown, Table, InputGroup, FormControl, Nav, Navbar, Container } from 'react-bootstrap';
+import { Modal, Button, DropdownButton, Dropdown, Table, InputGroup, FormControl, Nav, Navbar, Container, Alert } from 'react-bootstrap';
 import socketIOClient from "socket.io-client";
-import { BrowserRouter as Redirect } from 'react-router-dom';
 
 /* const apiUrl = "https://jsramverk-editor-auro17.azurewebsites.net" */
 const apiUrl = "http://localhost:1337"
-const SAVE_INTERVAL = 2000
+const SAVE_INTERVAL = 5000
 
 class Editor extends Component {
     constructor(props) {
         super(props);
-        this.docid = props.match.params.id;
         this.quillRef = null;      // Quill instance
         this.reactQuillRef = null; // ReactQuill component
+        this.socket = null;
+        this.interval = false;
+        this.timeSinceEdit = new Date();
         this.state = {
             error: null,
             apiLoaded: false,
             documents: [],
             openModalShown: false,
             newModalShown: false,
-            selectedDoc: null,
             editData: null,
             newDocName: null,
-            socket: null
+            alertShown: false,
+            docid: props.match.params.id,
+            userChanged: false
         }
     }
 
@@ -44,7 +46,7 @@ class Editor extends Component {
     }
 
     formats = [
-        'header',
+        'header', 'background', 'font', 'color', 'align', 'code-block', 'script',
         'bold', 'italic', 'underline', 'strike', 'blockquote',
         'list', 'bullet', 'indent',
         'link', 'image'
@@ -56,26 +58,38 @@ class Editor extends Component {
         // Attaching Quill
         this.attachQuillRefs()
 
-        this.quillRef.disable();
+        //this.quillRef.disable();
         this.quillRef.setText("Loading...");
+
+        // Attaching socket
+        const sock = socketIOClient(apiUrl);
+        this.socket = sock;
 
         // Refreshing doc list from DB
         this.listDocuments()
 
-        // Attaching socket
-        const s = socketIOClient(apiUrl)
-        this.setState({ socket: s })
-
-        this.receiveChanges(); // Receive realtime changes to document
-        this.openDocument(this.docid); // Open document based off route
-        this.autoSave(); // Setup autosave
+        console.log("Mounted with docid:", this.state.docid);
+        if (this.state.docid === undefined) {
+            console.log("No docid in URL / no doc opened.");
+            this.showAlert();
+        } else {
+            console.log("docid is defined!");
+            this.openDocument(this.state.docid); // Open document based off route
+            this.receiveChanges();
+            console.log("setting up autosave:");
+            this.autoSave(); // Setup autosave
+        }
     }
 
     componentWillUnmount() {
-        if (this.state.socket == null) { return }
-        //this.state.socket.removeAllListeners();
-        this.state.socket.disconnect();
-        console.log("Disconnected from server.");
+        if (this.socket !== null) {
+            this.socket.removeAllListeners();
+            this.socket.disconnect();
+            console.log("Disconnected from server.");
+        }
+        if (this.interval) {
+            clearInterval(this.interval);
+        }
     }
 
     componentDidUpdate() {
@@ -90,59 +104,79 @@ class Editor extends Component {
     }
 
     receiveChanges() {
-        if (this.state.socket == null || this.quillRef == null) return;
-        this.state.socket.on("receive-changes", delta => {
-            console.log("client received changes");
+        console.log("receive changes called");
+        if (this.socket == null || this.quillRef == null) return;
+        this.socket.once("receive-changes", (delta) => { // DEBUG
+            console.log("Received changes!", delta);
+        })
+        this.socket.on("receive-changes", delta => {
             this.quillRef.updateContents(delta);
         })
+        this.setState({ userChanged: false });
     }
 
     openDocument = (docid, e = null) => {
         if (e) e.preventDefault();
-        if (this.state.socket == null || this.quillRef == null) return;
+        if (this.socket == null || this.quillRef == null) {
+            console.log("socket:", this.socket, "quillref:", this.quillRef);
+            return;
+        }
         if (docid !== this.props.match.params.id) { // if on wrong url
             console.log("redirecting to correct url");
             this.props.history.push(`/docs/${docid}`)
         }
-        this.state.socket.once("load-document", content => {
-            console.log("received doc content:", content);
-            this.quillRef.setContents(content);
+        this.socket.on("load-document", document => {
+            console.log("Received init content:", document.data);
+            this.setState({ docid: docid, userChanged: false }) // important to ignore changes fetched
+            this.quillRef.setContents(document.data, 'api');
             this.quillRef.enable();
-            this.setState({ selectedDoc: docid })
         })
         console.log("requesting to open doc:", docid);
-        this.state.socket.emit("get-document", docid)
+        this.socket.emit("get-document", docid)
 
     }
 
     createDocument = (name, e = null) => {
         if (e) e.preventDefault();
-        if (this.state.socket == null) { return }
-        this.state.socket.once("created-document", document => {
-            console.log("received created document with name:", document.name);
+        if (this.socket == null) { return }
+        this.socket.on("created-document", document => {
+            console.log("received created document with name:", document.name, "id:", document._id);
             console.log("opening newly created doc");
             this.openDocument(document._id)
         })
         console.log("sending request to create doc with name:", name);
-        this.state.socket.emit("create-document", this.docid, name)
+        this.socket.emit("create-document", name)
     }
 
     saveDocument = (e = null) => {
         if (e) e.preventDefault();
-        if (this.state.socket == null || this.quillRef == null) return;
-        this.state.socket.emit("save-document", this.quillRef.getContents())
+        if (this.socket == null || this.quillRef == null || this.state.docid === undefined) {
+            console.log("couldnt save. sock:", this.socket, "quillref:", this.quillRef, "docid:", this.state.docid);
+            return;
+        }
+        this.socket.once("saved-status", (status) => {
+            console.log("received save status:", status)
+        })
+        this.socket.emit("save-document", this.state.docid, this.quillRef.getContents())
         console.log("Saved! Timestamp:", Date.now(), "static delta:", this.quillRef.getContents());
     }
 
     autoSave = () => {
-        if (this.state.socket == null || this.quillRef == null) return;
-        const interval = setInterval(() => {
-            this.saveDocument()
-            console.log("Autosaved!");
+        if (this.socket == null || this.quillRef == null) return;
+
+        this.interval = setInterval(() => {
+            const elapsed = Date.now() - this.timeSinceEdit;
+            if (this.state.userChanged) {
+                console.log("has changed");
+                if (elapsed > SAVE_INTERVAL) {
+                    console.log('autosaving changes');
+                    this.saveDocument();
+                    this.setState({ userChanged: false });
+                }
+            } else {
+                console.log("has not changed");
+            }
         }, SAVE_INTERVAL)
-        return () => {
-            clearInterval(interval)
-        }
     }
 
     /* MISC FUNCTIONS */
@@ -154,53 +188,55 @@ class Editor extends Component {
 
     handleChange = (html, delta, source, editor) => {
         // Making sure socket and Quill are attached
-        if (this.state.socket == null || this.quillRef == null) return;
+        if (this.socket == null || this.quillRef == null) return;
         if (source !== "user") return; // Prevent changes not made by user
-        this.setState({ editData: html });
-        console.log("attempting to send changes delta:", delta);
-        this.state.socket.on("saved-status", (status) => {
-            console.log("received save status:", status)
-        })
-        this.state.socket.emit("send-changes", delta);
+        this.setState({ editData: html, userChanged: true });
+        // console.log("Sending changes:", delta); // DEBUG
+        this.socket.emit("send-changes", delta);
+        this.timeSinceEdit = Date.now(); // set timer to last edit
     }
 
     listDocuments() {
         console.log("refresh list invoked");
-        if (this.state.socket == null) return;
-        this.state.socket.once("listed-documents", docs => {
+        if (this.socket == null) return;
+        this.socket.on("listed-documents", docs => {
             console.log("loaded docs", docs);
             this.setState({ documents: docs, apiLoaded: true })
         })
         console.log("socket n quill not null");
-        this.state.socket.emit("list-documents", "asd")
+        this.socket.emit("list-documents")
     }
 
     resetDB = (e = null) => {
         if (e) e.preventDefault();
         console.log("RESET invoked");
-        if (this.state.socket == null) return;
-        this.state.socket.on("resetdb", () => {
+        if (this.socket == null) return;
+        this.socket.on("resetdb", () => {
             console.log("successfully reset db!")
         })
-        this.state.socket.emit("resetdb")
+        this.socket.emit("resetdb")
     }
 
-    /* MODAL TOGGLES */
-    showOpenModal = () => { this.setState({ openModalShown: true }); this.listDocuments() }
+    /* TOGGLES */
+    showOpenModal = () => { this.listDocuments(); this.setState({ openModalShown: true });  }
     hideOpenModal = () => { this.setState({ openModalShown: false }) }
     showNewModal = () => { this.setState({ newModalShown: true }) }
     hideNewModal = () => { this.setState({ newModalShown: false }) }
-    /* MODAL TOGGLES END */
+    showAlert = () => { this.setState({ alertShown: true }) }
+    hideAlert = () => { this.setState({ alertShown: false }) }
+    /* TOGGLES END */
 
     render() {
-        const { error, documents, openModalShown, newModalShown, editData, apiLoaded, newDocName } = this.state;
+        const { error, documents, openModalShown, newModalShown, editData, newDocName, alertShown, apiLoaded } = this.state;
 
-        if (error) {
-            console.log("Error:", error.message)
-        }
+        if (error) { console.log("Error:", error.message) }
 
         return (
             <div className="Editor">
+                <Alert variant="primary" show={alertShown} onClose={this.hideAlert} dismissible>
+                    Please open or create a document.
+                </Alert>
+
                 <Navbar bg="dark" variant="dark" className="toolbar">
                     <Container>
                         <Navbar.Brand href="#home" className="justify-content-center">
