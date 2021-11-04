@@ -62,6 +62,10 @@ body {
     margin-left: -150px;
 }
 
+.toast-container {
+    z-index: 3 !important;
+}
+
 /* EDITOR MAIN*/ 
 
 .ck-editor__main,

@@ -2,12 +2,12 @@ import React, { Component } from 'react';
 import ReactQuill from 'react-quill';
 import 'react-quill/dist/quill.snow.css';
 import { FaGithub } from 'react-icons/fa';
-import { Modal, Button, DropdownButton, Dropdown, Table, InputGroup, FormControl, Nav, Navbar, Container, Alert } from 'react-bootstrap';
+import { Modal, Button, DropdownButton, Dropdown, Table, InputGroup, FormControl, Nav, Navbar, Container, Alert, ToastContainer, Toast } from 'react-bootstrap';
 import socketIOClient from "socket.io-client";
 
 /* const apiUrl = "https://jsramverk-editor-auro17.azurewebsites.net" */
 const apiUrl = "http://localhost:1337"
-const SAVE_INTERVAL = 5000
+const SAVE_INTERVAL = 10000
 
 class Editor extends Component {
     constructor(props) {
@@ -28,7 +28,8 @@ class Editor extends Component {
             alertShown: false,
             docid: props.match.params.id,
             userChanged: false,
-            alertContent: ""
+            alertContent: "",
+            toastShow: false
         }
     }
 
@@ -72,9 +73,11 @@ class Editor extends Component {
 
     componentWillUnmount() {
         if (this.socket !== null) {
-            this.socket.removeAllListeners();
             this.socket.disconnect();
             console.log("=> Disconnected from server.");
+            this.socket.removeAllListeners();
+            console.log("=> Removed all socket listeners.");
+            document.removeEventListener("keydown", this.saveKeysHandler); // removes ctrl+s listener
         }
         if (this.interval) {
             clearInterval(this.interval);
@@ -88,9 +91,7 @@ class Editor extends Component {
     /* HELPER FUNCTIONS */
 
     docidExists = (docs, docid) => {
-        console.log("=> docidExists called! docid:", docid, "docs:", docs);
         return docs.some(function (el) {
-            console.log("=> el._id=", el._id, "docid=", docid);
             return el._id === docid;
         });
     }
@@ -107,8 +108,9 @@ class Editor extends Component {
                 console.log("=> No docid in URL / no doc opened.");
                 this.showAlert("Please open or create a document.");
             } else if (docExists) {
-                console.log("=> docid is defined!");
+                console.log("=> Document exists! Opening...");
                 this.openDocument(this.state.docid); // Open document based off route
+                document.addEventListener("keydown", this.saveKeysHandler);
             } else {
                 console.log("=> document doesnt exist!");
                 this.showAlert("The document doesnt exist!");
@@ -130,7 +132,7 @@ class Editor extends Component {
     }
 
     receiveChanges() {
-        console.log("=> receive changes called");
+        console.log("=> Now accepting realtime changes!");
         if (this.socket == null || this.quillRef == null) return;
         this.socket.once("receive-changes", (delta) => { // DEBUG
             console.log("<= Received changes!", delta);
@@ -152,12 +154,12 @@ class Editor extends Component {
             this.props.history.push(`/docs/${docid}`)
         }
         this.socket.once("load-document", document => {
-            console.log("<= Received init content:", document.data);
+            console.log("<= Received initial content:", document.data);
             this.setState({ docid: docid, userChanged: false }) // important to ignore changes fetched
             this.quillRef.setContents(document.data, 'api');
             this.quillRef.enable();
         })
-        console.log("=> requesting to open doc:", docid);
+        console.log("=> Calling API to send doc:", docid);
         this.socket.emit("get-document", docid)
         this.receiveChanges();
         this.autoSave(); // Setup autosave
@@ -183,10 +185,11 @@ class Editor extends Component {
             return;
         }
         this.socket.once("saved-status", (status) => {
-            console.log("<= received save status:", status)
+            console.log("<= Received save status:", status)
         })
         this.socket.emit("save-document", this.state.docid, this.quillRef.getContents())
         console.log("=> Saved! data:", this.quillRef.getContents());
+        this.setState({ toastShow: true });
     }
 
     autoSave = () => {
@@ -195,16 +198,23 @@ class Editor extends Component {
         this.interval = setInterval(() => {
             const elapsed = Date.now() - this.timeSinceEdit;
             if (this.state.userChanged) {
-                console.log("=> has changed");
+                console.log("=> User has edited! Going to autosave...");
                 if (elapsed > SAVE_INTERVAL) {
-                    console.log('=> autosaving...');
+                    console.log('=> AUTOSAVED!');
                     this.saveDocument();
-                    this.setState({ userChanged: false });
+                    this.setState({ userChanged: false }); // resetting var
                 }
             } else {
-                console.log("=> has not changed");
+                console.log("=> Skipping autosave (user hasn't edited)...");
             }
         }, SAVE_INTERVAL)
+    }
+
+    saveKeysHandler = (e) => {
+        if (e.key === "s" && e.ctrlKey) {
+            e.preventDefault();
+            this.saveDocument();
+        }
     }
 
     /* MISC FUNCTIONS */
@@ -244,7 +254,7 @@ class Editor extends Component {
     /* TOGGLES END */
 
     render() {
-        const { error, documents, openModalShown, newModalShown, editData, newDocName, alertShown, apiLoaded, alertContent } = this.state;
+        const { error, documents, openModalShown, newModalShown, editData, newDocName, alertShown, apiLoaded, alertContent, toastShow } = this.state;
 
         if (error) { console.log("Error:", error.message) }
 
@@ -253,6 +263,8 @@ class Editor extends Component {
                 <Alert variant="primary" show={alertShown} onClose={this.hideAlert} dismissible>
                     {alertContent}
                 </Alert>
+
+
 
                 <Navbar bg="dark" variant="dark" className="toolbar">
                     <Container>
@@ -295,6 +307,16 @@ class Editor extends Component {
                         onChange={this.handleChange}
                     />
                 </Container>
+
+                <ToastContainer position="top-end" className="p-3">
+                    <Toast onClose={() => this.setState({ toastShow: false })} show={toastShow} delay={4000} autohide>
+                        <Toast.Header>
+                            <strong className="me-auto">Notice</strong>
+                            <small className="text-muted">just now</small>
+                        </Toast.Header>
+                        <Toast.Body>The document was saved.</Toast.Body>
+                    </Toast>
+                </ToastContainer>
 
                 <Modal show={openModalShown} onHide={this.hideOpenModal}>
                     <Modal.Header closeButton>
