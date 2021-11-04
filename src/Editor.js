@@ -55,7 +55,7 @@ class Editor extends Component {
 
     /* COMPONENT LIFECYCLE */
 
-    componentDidMount() {
+    async componentDidMount() {
         // Attaching Quill
         this.attachQuillRefs()
 
@@ -67,21 +67,7 @@ class Editor extends Component {
         this.socket = sock;
 
         // Refreshing doc list from DB
-        this.listDocuments()
-
-        let docExists = this.docidExists();
-
-        console.log("=> Mounted with docid:", this.state.docid);
-        if (this.state.docid === undefined) {
-            console.log("=> No docid in URL / no doc opened.");
-            this.showAlert("Please open or create a document.");
-        } else if (docExists) {
-            console.log("=> docid is defined!");
-            this.openDocument(this.state.docid); // Open document based off route
-        } else {
-            console.log("=> document doesnt exist!");
-            this.showAlert("The document doesnt exist!");
-        }
+        this.firstFetch()
     }
 
     componentWillUnmount() {
@@ -101,12 +87,41 @@ class Editor extends Component {
 
     /* HELPER FUNCTIONS */
 
-    docidExists = () => {
-        console.log("=> docidExists called! =)");
-        return this.state.documents.some(function (el) {
-            console.log("=> el._id=", el._id, "this.state.docid=", this.state.docid);
-            return el._id === this.state.docid;
+    docidExists = (docs, docid) => {
+        console.log("=> docidExists called! docid:", docid, "docs:", docs);
+        return docs.some(function (el) {
+            console.log("=> el._id=", el._id, "docid=", docid);
+            return el._id === docid;
         });
+    }
+
+    firstFetch = async () => {
+        this.socket.emit("list-documents")
+        await new Promise(resolve => {
+            this.socket.once("list-documents", docs => { resolve(docs); });
+        }).then((docs) => {
+            console.log("<= Received docs:", docs);
+            this.setState({ documents: docs, apiLoaded: true })
+            let docExists = this.docidExists(docs, this.state.docid);
+            if (this.state.docid === undefined) {
+                console.log("=> No docid in URL / no doc opened.");
+                this.showAlert("Please open or create a document.");
+            } else if (docExists) {
+                console.log("=> docid is defined!");
+                this.openDocument(this.state.docid); // Open document based off route
+            } else {
+                console.log("=> document doesnt exist!");
+                this.showAlert("The document doesnt exist!");
+            }
+        })
+    }
+
+    listDocuments() {
+        this.socket.once("listed-documents", docs => {
+            console.log("<= Received docs:", docs);
+            this.setState({ documents: docs, apiLoaded: true })
+        })
+        this.socket.emit("list-documents")
     }
 
     attachQuillRefs = () => {
@@ -136,7 +151,7 @@ class Editor extends Component {
             console.log("=> redirecting to correct url");
             this.props.history.push(`/docs/${docid}`)
         }
-        this.socket.on("load-document", document => {
+        this.socket.once("load-document", document => {
             console.log("<= Received init content:", document.data);
             this.setState({ docid: docid, userChanged: false }) // important to ignore changes fetched
             this.quillRef.setContents(document.data, 'api');
@@ -207,16 +222,6 @@ class Editor extends Component {
         // console.log("Sending changes:", delta); // DEBUG
         this.socket.emit("send-changes", delta);
         this.timeSinceEdit = Date.now(); // set timer to last edit
-    }
-
-    listDocuments() {
-        if (this.socket == null) return;
-        console.log("=> Listing docs...");
-        this.socket.on("listed-documents", docs => {
-            console.log("<= Received docs:", docs);
-            this.setState({ documents: docs, apiLoaded: true })
-        })
-        this.socket.emit("list-documents")
     }
 
     resetDB = (e = null) => {
