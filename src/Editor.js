@@ -211,7 +211,7 @@ class Editor extends Component {
     }
 
     saveKeysHandler = (e) => {
-        if (e.key === "s" && e.ctrlKey) {
+        if (e.key === "s" && (navigator.platform.match("Mac") ? e.metaKey : e.ctrlKey)) {
             e.preventDefault();
             this.saveDocument();
         }
