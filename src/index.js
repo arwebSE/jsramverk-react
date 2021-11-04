@@ -11,7 +11,7 @@ ReactDOM.render(
     <React.StrictMode>
         <Router>
             <Switch>
-                <Route path="/" exact component={Editor} />
+                <Route path="/docs" exact component={Editor} />
                 <Route path="/docs/:id" exact component={Editor} />
             </Switch>
         </Router>

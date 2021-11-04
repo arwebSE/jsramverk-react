@@ -27,7 +27,8 @@ class Editor extends Component {
             newDocName: null,
             alertShown: false,
             docid: props.match.params.id,
-            userChanged: false
+            userChanged: false,
+            alertContent: ""
         }
     }
 
@@ -68,16 +69,18 @@ class Editor extends Component {
         // Refreshing doc list from DB
         this.listDocuments()
 
-        console.log("Mounted with docid:", this.state.docid);
+        let docExists = this.docidExists();
+
+        console.log("=> Mounted with docid:", this.state.docid);
         if (this.state.docid === undefined) {
-            console.log("No docid in URL / no doc opened.");
-            this.showAlert();
-        } else {
-            console.log("docid is defined!");
+            console.log("=> No docid in URL / no doc opened.");
+            this.showAlert("Please open or create a document.");
+        } else if (docExists) {
+            console.log("=> docid is defined!");
             this.openDocument(this.state.docid); // Open document based off route
-            this.receiveChanges();
-            console.log("setting up autosave:");
-            this.autoSave(); // Setup autosave
+        } else {
+            console.log("=> document doesnt exist!");
+            this.showAlert("The document doesnt exist!");
         }
     }
 
@@ -85,7 +88,7 @@ class Editor extends Component {
         if (this.socket !== null) {
             this.socket.removeAllListeners();
             this.socket.disconnect();
-            console.log("Disconnected from server.");
+            console.log("=> Disconnected from server.");
         }
         if (this.interval) {
             clearInterval(this.interval);
@@ -98,16 +101,24 @@ class Editor extends Component {
 
     /* HELPER FUNCTIONS */
 
+    docidExists = () => {
+        console.log("=> docidExists called! =)");
+        return this.state.documents.some(function (el) {
+            console.log("=> el._id=", el._id, "this.state.docid=", this.state.docid);
+            return el._id === this.state.docid;
+        });
+    }
+
     attachQuillRefs = () => {
         if (typeof this.reactQuillRef.getEditor !== 'function') return;
         this.quillRef = this.reactQuillRef.getEditor();
     }
 
     receiveChanges() {
-        console.log("receive changes called");
+        console.log("=> receive changes called");
         if (this.socket == null || this.quillRef == null) return;
         this.socket.once("receive-changes", (delta) => { // DEBUG
-            console.log("Received changes!", delta);
+            console.log("<= Received changes!", delta);
         })
         this.socket.on("receive-changes", delta => {
             this.quillRef.updateContents(delta);
@@ -118,47 +129,49 @@ class Editor extends Component {
     openDocument = (docid, e = null) => {
         if (e) e.preventDefault();
         if (this.socket == null || this.quillRef == null) {
-            console.log("socket:", this.socket, "quillref:", this.quillRef);
+            console.log("=> socket:", this.socket, "quillref:", this.quillRef);
             return;
         }
         if (docid !== this.props.match.params.id) { // if on wrong url
-            console.log("redirecting to correct url");
+            console.log("=> redirecting to correct url");
             this.props.history.push(`/docs/${docid}`)
         }
         this.socket.on("load-document", document => {
-            console.log("Received init content:", document.data);
+            console.log("<= Received init content:", document.data);
             this.setState({ docid: docid, userChanged: false }) // important to ignore changes fetched
             this.quillRef.setContents(document.data, 'api');
             this.quillRef.enable();
         })
-        console.log("requesting to open doc:", docid);
+        console.log("=> requesting to open doc:", docid);
         this.socket.emit("get-document", docid)
-
+        this.receiveChanges();
+        this.autoSave(); // Setup autosave
+        this.hideAlert();
     }
 
     createDocument = (name, e = null) => {
         if (e) e.preventDefault();
         if (this.socket == null) { return }
         this.socket.on("created-document", document => {
-            console.log("received created document with name:", document.name, "id:", document._id);
-            console.log("opening newly created doc");
+            console.log("<= received created document with name:", document.name, "id:", document._id);
+            console.log("<= opening it...");
             this.openDocument(document._id)
         })
-        console.log("sending request to create doc with name:", name);
+        console.log("=> sending request to create doc with name:", name);
         this.socket.emit("create-document", name)
     }
 
     saveDocument = (e = null) => {
         if (e) e.preventDefault();
         if (this.socket == null || this.quillRef == null || this.state.docid === undefined) {
-            console.log("couldnt save. sock:", this.socket, "quillref:", this.quillRef, "docid:", this.state.docid);
+            console.log("=> couldnt save. sock:", this.socket, "quillref:", this.quillRef, "docid:", this.state.docid);
             return;
         }
         this.socket.once("saved-status", (status) => {
-            console.log("received save status:", status)
+            console.log("<= received save status:", status)
         })
         this.socket.emit("save-document", this.state.docid, this.quillRef.getContents())
-        console.log("Saved! Timestamp:", Date.now(), "static delta:", this.quillRef.getContents());
+        console.log("=> Saved! data:", this.quillRef.getContents());
     }
 
     autoSave = () => {
@@ -167,14 +180,14 @@ class Editor extends Component {
         this.interval = setInterval(() => {
             const elapsed = Date.now() - this.timeSinceEdit;
             if (this.state.userChanged) {
-                console.log("has changed");
+                console.log("=> has changed");
                 if (elapsed > SAVE_INTERVAL) {
-                    console.log('autosaving changes');
+                    console.log('=> autosaving...');
                     this.saveDocument();
                     this.setState({ userChanged: false });
                 }
             } else {
-                console.log("has not changed");
+                console.log("=> has not changed");
             }
         }, SAVE_INTERVAL)
     }
@@ -197,44 +210,43 @@ class Editor extends Component {
     }
 
     listDocuments() {
-        console.log("refresh list invoked");
         if (this.socket == null) return;
+        console.log("=> Listing docs...");
         this.socket.on("listed-documents", docs => {
-            console.log("loaded docs", docs);
+            console.log("<= Received docs:", docs);
             this.setState({ documents: docs, apiLoaded: true })
         })
-        console.log("socket n quill not null");
         this.socket.emit("list-documents")
     }
 
     resetDB = (e = null) => {
         if (e) e.preventDefault();
-        console.log("RESET invoked");
         if (this.socket == null) return;
         this.socket.on("resetdb", () => {
-            console.log("successfully reset db!")
+            console.log("<= DB reset OK!")
         })
+        console.log("=> Sending reset request...");
         this.socket.emit("resetdb")
     }
 
     /* TOGGLES */
-    showOpenModal = () => { this.listDocuments(); this.setState({ openModalShown: true });  }
+    showOpenModal = () => { this.listDocuments(); this.setState({ openModalShown: true }); }
     hideOpenModal = () => { this.setState({ openModalShown: false }) }
     showNewModal = () => { this.setState({ newModalShown: true }) }
     hideNewModal = () => { this.setState({ newModalShown: false }) }
-    showAlert = () => { this.setState({ alertShown: true }) }
+    showAlert = (content) => { this.setState({ alertShown: true, alertContent: content }) }
     hideAlert = () => { this.setState({ alertShown: false }) }
     /* TOGGLES END */
 
     render() {
-        const { error, documents, openModalShown, newModalShown, editData, newDocName, alertShown, apiLoaded } = this.state;
+        const { error, documents, openModalShown, newModalShown, editData, newDocName, alertShown, apiLoaded, alertContent } = this.state;
 
         if (error) { console.log("Error:", error.message) }
 
         return (
             <div className="Editor">
                 <Alert variant="primary" show={alertShown} onClose={this.hideAlert} dismissible>
-                    Please open or create a document.
+                    {alertContent}
                 </Alert>
 
                 <Navbar bg="dark" variant="dark" className="toolbar">
