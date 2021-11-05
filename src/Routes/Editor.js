@@ -4,9 +4,15 @@ import 'react-quill/dist/quill.snow.css';
 import { FaGithub } from 'react-icons/fa';
 import { Modal, Button, DropdownButton, Dropdown, Table, InputGroup, FormControl, Nav, Navbar, Container, Alert, ToastContainer, Toast } from 'react-bootstrap';
 import socketIOClient from "socket.io-client";
+require("dotenv").config()
 
-/* const apiUrl = "https://jsramverk-editor-auro17.azurewebsites.net" */
-const apiUrl = "http://localhost:1337"
+let apiUrl;
+if (process.env.NODE_ENV === "development") {
+    console.log("Dev Mode!");
+    apiUrl = "http://localhost:1337";
+} else {
+    apiUrl = "https://jsramverk-editor-auro17.azurewebsites.net";
+}
 const SAVE_INTERVAL = 10000
 
 class Editor extends Component {
@@ -57,6 +63,8 @@ class Editor extends Component {
     /* COMPONENT LIFECYCLE */
 
     async componentDidMount() {
+        console.log("=> Connecting to API at:", apiUrl);
+
         // Attaching Quill
         this.attachQuillRefs()
 
@@ -264,11 +272,9 @@ class Editor extends Component {
                     {alertContent}
                 </Alert>
 
-
-
                 <Navbar bg="dark" variant="dark" className="toolbar">
                     <Container>
-                        <Navbar.Brand href="#home" className="justify-content-center">
+                        <Navbar.Brand href="#" className="justify-content-center">
                             <img src="logo.png" width="30" height="30"
                                 className="d-inline-block align-top" alt="AuroDocs logo"
                             /> AuroDocs™
