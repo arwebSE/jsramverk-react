@@ -11,10 +11,12 @@ In the project directory, you can run:
 Runs the app in the development mode.\
 Open [http://localhost:3000](http://localhost:3000) to view it in the browser.
 
+
 ### `yarn test`
 
 Launches the test runner in the interactive watch mode.\
 See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+
 
 ### `yarn build`
 
@@ -25,9 +27,16 @@ The build is minified and the filenames include the hashes.
 
 See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
 
+
 ### `yarn deploy`
 
-Deploys to student server.
+Runs `yarn build` and deploys to student server.
+
+
+### `yarn justsend`
+
+Deploys to student server without building first.
+
 
 ### `yarn eject`
 
