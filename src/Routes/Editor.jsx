@@ -1,8 +1,10 @@
 import React, { Component } from 'react';
 import ReactQuill from 'react-quill';
+import Header from '../layout/Header';
+import Footer from '../layout/Footer';
 import 'react-quill/dist/quill.snow.css';
-import { FaGithub } from 'react-icons/fa';
-import { Modal, Button, DropdownButton, Dropdown, Table, InputGroup, FormControl, Nav, Navbar, Container, Alert, ToastContainer, Toast } from 'react-bootstrap';
+import '../styles/editor.scss';
+import { Modal, Button, Table, InputGroup, FormControl, Container, Alert, ToastContainer, Toast } from 'react-bootstrap';
 import socketIOClient from "socket.io-client";
 require("dotenv").config()
 
@@ -267,104 +269,85 @@ class Editor extends Component {
         if (error) { console.log("Error:", error.message) }
 
         return (
-            <div className="Editor">
+            <>
                 <Alert variant="primary" show={alertShown} onClose={this.hideAlert} dismissible>
                     {alertContent}
                 </Alert>
 
-                <Navbar bg="dark" variant="dark" className="toolbar">
+                <Header editor={true}
+                    new={this.showNewModal}
+                    open={this.showOpenModal}
+                    save={this.saveDocument}
+                    print={e => this.printEditData(e)}
+                    reset={this.resetDB}
+                />
+
+                <main className="editor">
                     <Container>
-                        <Navbar.Brand href="#" className="justify-content-center">
-                            <img src="logo.png" width="30" height="30"
-                                className="d-inline-block align-top" alt="AuroDocs logo"
-                            /> AuroDocs™
-                        </Navbar.Brand>
-                        <Navbar.Toggle aria-controls="basic-navbar-nav" />
-                        <Navbar.Collapse id="basic-navbar-nav">
-                            <Nav className="me-auto">
-                                <DropdownButton title="File">
-                                    <Dropdown.Item onClick={this.showNewModal}>New</Dropdown.Item>
-                                    <Dropdown.Item onClick={this.showOpenModal}>Open...</Dropdown.Item>
-                                    <Dropdown.Item onClick={this.saveDocument}>Save</Dropdown.Item>
-                                </DropdownButton>
-                                <DropdownButton title="Edit" variant="secondary"> </DropdownButton>
-                                <DropdownButton title="View" variant="secondary">
-                                    <Dropdown.Item onClick={e => this.printEditData(e)}>Print content to Console</Dropdown.Item>
-                                </DropdownButton>
-                                <DropdownButton title="Help" variant="info">
-                                    <Dropdown.Item onClick={this.resetDB}>Reset Database</Dropdown.Item>
-                                </DropdownButton>
-                            </Nav>
-                        </Navbar.Collapse>
-
-                        <div className="justify-content-end">
-                            <Button variant="success" href="https://github.com/arwebSE/jsramverk-react">GitHub <FaGithub /></Button>
-                        </div>
+                        <ReactQuill
+                            ref={(el) => { this.reactQuillRef = el }}
+                            theme={'snow'}
+                            modules={this.modules}
+                            formats={this.formats}
+                            value={editData}
+                            onChange={this.handleChange}
+                        />
                     </Container>
-                </Navbar>
 
-                <Container>
-                    <ReactQuill
-                        ref={(el) => { this.reactQuillRef = el }}
-                        theme={'snow'}
-                        modules={this.modules}
-                        formats={this.formats}
-                        value={editData}
-                        onChange={this.handleChange}
-                    />
-                </Container>
+                    <ToastContainer position="top-end" className="p-3">
+                        <Toast onClose={() => this.setState({ toastShow: false })} show={toastShow} delay={4000} autohide>
+                            <Toast.Header>
+                                <strong className="me-auto">Notice</strong>
+                                <small className="text-muted">just now</small>
+                            </Toast.Header>
+                            <Toast.Body>The document was saved.</Toast.Body>
+                        </Toast>
+                    </ToastContainer>
 
-                <ToastContainer position="top-end" className="p-3">
-                    <Toast onClose={() => this.setState({ toastShow: false })} show={toastShow} delay={4000} autohide>
-                        <Toast.Header>
-                            <strong className="me-auto">Notice</strong>
-                            <small className="text-muted">just now</small>
-                        </Toast.Header>
-                        <Toast.Body>The document was saved.</Toast.Body>
-                    </Toast>
-                </ToastContainer>
+                    <Modal show={openModalShown} onHide={this.hideOpenModal}>
+                        <Modal.Header closeButton>
+                            <Modal.Title>Open Document</Modal.Title>
+                        </Modal.Header>
+                        <Modal.Body>
+                            {!apiLoaded && "Loading..."}
+                            {apiLoaded &&
+                                <Table striped hover>
+                                    <tbody>{documents.map(document =>
+                                        <tr key={document._id}>
+                                            <td>
+                                                <Button variant="link" value={document._id} onClick={e => { this.openDocument(document._id, e); this.hideOpenModal(); }}>
+                                                    {document.name} (ID: {document._id})
+                                                </Button>
+                                            </td>
+                                        </tr>)
+                                    }</tbody>
+                                </Table>
+                            }
+                        </Modal.Body>
+                        <Modal.Footer>
+                            <Button variant="primary" onClick={this.hideOpenModal}>Close</Button>
+                        </Modal.Footer>
+                    </Modal>
 
-                <Modal show={openModalShown} onHide={this.hideOpenModal}>
-                    <Modal.Header closeButton>
-                        <Modal.Title>Open Document</Modal.Title>
-                    </Modal.Header>
-                    <Modal.Body>
-                        {!apiLoaded && "Loading..."}
-                        {apiLoaded &&
-                            <Table striped hover>
-                                <tbody>{documents.map(document =>
-                                    <tr key={document._id}>
-                                        <td>
-                                            <Button variant="link" value={document._id} onClick={e => { this.openDocument(document._id, e); this.hideOpenModal(); }}>
-                                                {document.name} (ID: {document._id})
-                                            </Button>
-                                        </td>
-                                    </tr>)
-                                }</tbody>
-                            </Table>
-                        }
-                    </Modal.Body>
-                    <Modal.Footer>
-                        <Button variant="primary" onClick={this.hideOpenModal}>Close</Button>
-                    </Modal.Footer>
-                </Modal>
+                    <Modal show={newModalShown} onHide={this.hideNewModal}>
+                        <Modal.Header closeButton>
+                            <Modal.Title>Create New Document</Modal.Title>
+                        </Modal.Header>
+                        <Modal.Body>
+                            <InputGroup size="lg">
+                                <InputGroup.Text id="inputGroup-sizing-lg">Name</InputGroup.Text>
+                                <FormControl aria-label="Large" aria-describedby="inputGroup-sizing-sm" onChange={(e) => this.setState({ newDocName: e.target.value })} />
+                            </InputGroup>
+                        </Modal.Body>
+                        <Modal.Footer>
+                            <Button variant="primary" onClick={(e) => { this.createDocument(newDocName, e); this.hideNewModal(); }}>Save</Button>
+                            <Button variant="secondary" onClick={this.hideNewModal}>Close</Button>
+                        </Modal.Footer>
+                    </Modal>
+                </main>
 
-                <Modal show={newModalShown} onHide={this.hideNewModal}>
-                    <Modal.Header closeButton>
-                        <Modal.Title>Create New Document</Modal.Title>
-                    </Modal.Header>
-                    <Modal.Body>
-                        <InputGroup size="lg">
-                            <InputGroup.Text id="inputGroup-sizing-lg">Name</InputGroup.Text>
-                            <FormControl aria-label="Large" aria-describedby="inputGroup-sizing-sm" onChange={(e) => this.setState({ newDocName: e.target.value })} />
-                        </InputGroup>
-                    </Modal.Body>
-                    <Modal.Footer>
-                        <Button variant="primary" onClick={(e) => { this.createDocument(newDocName, e); this.hideNewModal(); }}>Save</Button>
-                        <Button variant="secondary" onClick={this.hideNewModal}>Close</Button>
-                    </Modal.Footer>
-                </Modal>
-            </div>
+                <Footer />
+            </>
         )
     }
 }
