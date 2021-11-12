@@ -15,7 +15,8 @@ if (process.env.NODE_ENV === "development") {
 } else {
     apiUrl = "https://jsramverk-editor-auro17.azurewebsites.net";
 }
-const SAVE_INTERVAL = 10000
+const SAVE_INTERVAL = 10000;
+const TOKEN_INTERVAL = 2000;
 
 class Editor extends Component {
     constructor(props) {
@@ -37,7 +38,10 @@ class Editor extends Component {
             docid: props.match.params.id,
             userChanged: false,
             alertContent: "",
-            toastShow: false
+            toastShow: false,
+            username: null,
+            accessToken: null,
+            refreshToken: null
         }
     }
 
@@ -65,20 +69,30 @@ class Editor extends Component {
     /* COMPONENT LIFECYCLE */
 
     async componentDidMount() {
-        console.log("=> Connecting to API at:", apiUrl);
+        // Handle username with storage
+        if (this.isLoggedIn()) {
+            // Setup auto refresh access token
+            this.autoRefreshToken();
 
-        // Attaching Quill
-        this.attachQuillRefs()
+            console.log("=> Connecting to API at:", apiUrl);
 
-        //this.quillRef.disable();
-        this.quillRef.setText("Loading...");
+            // Attaching Quill
+            this.attachQuillRefs()
 
-        // Attaching socket
-        const sock = socketIOClient(apiUrl);
-        this.socket = sock;
+            //this.quillRef.disable();
+            this.quillRef.setText("Loading...");
 
-        // Refreshing doc list from DB
-        this.firstFetch()
+            // Attaching socket
+            const sock = socketIOClient(apiUrl);
+            this.socket = sock;
+
+            // Refreshing doc list from DB
+            this.firstFetch();
+        } else {
+            // Username is not set
+            console.log("Aborting load.");
+            this.props.history.push({ pathname: '/login' })
+        }
     }
 
     componentWillUnmount() {
@@ -100,6 +114,37 @@ class Editor extends Component {
 
     /* HELPER FUNCTIONS */
 
+    isLoggedIn() {
+        console.log("Stored username:", localStorage.getItem('username'));
+        if (localStorage.getItem('username') === null) {
+            console.log("Looking for loc props...", this.props.location.state);
+            if (this.props.location.state !== undefined) {
+                this.setState({
+                    username: this.props.location.state.username,
+                    accessToken: this.props.location.state.accessToken,
+                    refreshToken: this.props.location.state.refreshToken
+                })
+                localStorage.setItem("username", this.props.location.state.username);
+                localStorage.setItem("accessToken", this.props.location.state.accessToken); // UNSECURE, TODO: FIGURE OUT SOMETHING BETTER
+                localStorage.setItem("refreshToken", this.props.location.state.refreshToken); // UNSECURE, TODO: FIGURE OUT SOMETHING BETTER
+                console.log("Got loc props! Set username to:", this.props.location.state.username, "and saved tokens to LS. (unsecure)");
+                return true;
+            } else {
+                console.log("Couldnt get loc props and not logged in. Back to login...", this.state.username);
+                this.props.history.push({ pathname: '/login' })
+            }
+        } else {
+            // UNSECURE, TODO: FIGURE OUT SOMETHING BETTER
+            this.setState({
+                username: localStorage.getItem('username'),
+                accessToken: localStorage.getItem('accessToken'),
+                refreshToken: localStorage.getItem('refreshToken')
+            })
+            return true;
+        }
+        return;
+    }
+
     docidExists = (docs, docid) => {
         return docs.some(function (el) {
             return el._id === docid;
@@ -107,7 +152,7 @@ class Editor extends Component {
     }
 
     firstFetch = async () => {
-        this.socket.emit("list-documents")
+        this.socket.emit("list-documents", this.state.username)
         await new Promise(resolve => {
             this.socket.once("list-documents", docs => { resolve(docs); });
         }).then((docs) => {
@@ -133,7 +178,8 @@ class Editor extends Component {
             console.log("<= Received docs:", docs);
             this.setState({ documents: docs, apiLoaded: true })
         })
-        this.socket.emit("list-documents")
+        this.socket.emit("list-documents", this.state.accessToken)
+        console.log("=> Requesting to list docs for user:", this.state.username);
     }
 
     attachQuillRefs = () => {
@@ -221,9 +267,82 @@ class Editor extends Component {
     }
 
     saveKeysHandler = (e) => {
-        if (e.key === "s" && (navigator.platform.match("Mac") ? e.metaKey : e.ctrlKey)) {
+        if (e.key === "s" && e.ctrlKey) {
             e.preventDefault();
             this.saveDocument();
+        }
+    }
+
+    autoRefreshToken = () => {
+        if (this.state.refreshToken == null) return;
+
+        this.interval = setInterval(() => {
+            this.refreshAccessToken();
+        }, TOKEN_INTERVAL)
+    }
+
+    refreshAccessToken = () => {
+        if (this.state.refreshToken !== null) {
+            console.log("Requesting to refresh token with:", this.state.refreshToken);
+            const requestOptions = {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ token: this.state.refreshToken })
+            };
+            fetch('http://localhost:1337/token', requestOptions)
+                .then(async response => {
+                    const isJson = response.headers.get('content-type')?.includes('application/json');
+                    const data = isJson && await response.json();
+
+                    if (!response.ok) {
+                        const error = (data && data.message) || response.status;
+                        console.log("Error refreshing token", data);
+                        return Promise.reject(error);
+                    }
+                    console.log("Successfully refreshed AccessToken!", data);
+                })
+                .catch(error => {
+                    console.error('Error refreshing atoken!', error);
+                });
+        } else {
+            console.log("RefreshToken is null!! this shudnt happen");
+        }
+    }
+
+    handleLogout = (e = null) => {
+        if (e) e.preventDefault();
+        console.log("Logging out! Deleting LocalStorage...");
+        localStorage.clear();
+        if (this.state.refreshToken !== null) {
+            console.log("Requesting to remove rftoken:", this.state.refreshToken);
+            const requestOptions = {
+                method: 'DELETE',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username: this.state.username, token: this.state.refreshToken })
+            };
+            fetch('http://localhost:1337/logout', requestOptions)
+                .then(async response => {
+                    const isJson = response.headers.get('content-type')?.includes('application/json');
+                    const data = isJson && await response.json();
+
+                    if (!response.ok) {
+                        const error = (data && data.message) || response.status;
+                        this.showAlert(data);
+                        return Promise.reject(error);
+                    }
+                    console.log("Successfully removed rftoken!");
+                    this.props.history.push({
+                        pathname: '/logout'
+                    })
+                })
+                .catch(error => {
+                    console.error('Error logging out!', error);
+                });
+        } else {
+            console.log("RefreshToken not set. Skipping DELETE request.");
+            this.props.history.push({
+                pathname: '/logout'
+            })
         }
     }
 
@@ -264,7 +383,7 @@ class Editor extends Component {
     /* TOGGLES END */
 
     render() {
-        const { error, documents, openModalShown, newModalShown, editData, newDocName, alertShown, apiLoaded, alertContent, toastShow } = this.state;
+        const { error, documents, openModalShown, newModalShown, editData, newDocName, alertShown, apiLoaded, alertContent, toastShow, username } = this.state;
 
         if (error) { console.log("Error:", error.message) }
 
@@ -280,6 +399,8 @@ class Editor extends Component {
                     save={this.saveDocument}
                     print={e => this.printEditData(e)}
                     reset={this.resetDB}
+                    username={username}
+                    logout={this.handleLogout}
                 />
 
                 <main className="editor">

@@ -1,5 +1,5 @@
 import React from 'react'
-import { Container, Button, Navbar, Nav, DropdownButton, Dropdown } from 'react-bootstrap';
+import { Container, Button, Navbar, Nav, DropdownButton, Dropdown, NavDropdown } from 'react-bootstrap';
 import { FaGithub } from 'react-icons/fa';
 import '../styles/header.scss';
 
@@ -16,7 +16,7 @@ export default function Header(props) {
                     </Navbar.Brand>
                     <Navbar.Toggle aria-controls="basic-navbar-nav" />
 
-                    <Navbar.Collapse id="basic-navbar-nav">
+                    <Navbar.Collapse>
                         <Nav className="me-auto">
                             {props.editor &&
                                 <>
@@ -37,9 +37,14 @@ export default function Header(props) {
                         </Nav>
                     </Navbar.Collapse>
 
-                    <div className="justify-content-end">
-                        <Button variant="success" href="https://github.com/arwebSE/jsramverk-react">GitHub <FaGithub /></Button>
-                    </div>
+                    <Navbar.Collapse className="justify-content-end">
+                        {props.editor &&
+                            <NavDropdown title={`Signed in as: ${props.username}`}>
+                                <NavDropdown.Item onClick={props.logout}>Logout</NavDropdown.Item>
+                            </NavDropdown>
+                        }
+                        <Button variant="dark" href="https://github.com/arwebSE/jsramverk-react">GitHub <FaGithub /></Button>
+                    </Navbar.Collapse>
                 </Container>
             </Navbar>
         </header>

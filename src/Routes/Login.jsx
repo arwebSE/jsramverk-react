@@ -40,8 +40,11 @@ export default class Login extends React.Component {
                     this.showAlert(data);
                     return Promise.reject(error);
                 }
-                console.log("Got accessToken:", data.accessToken, "refreshToken:", data.refreshToken);
-                //this.setState({ accessToken: data.accessToken, refreshToken: data.refreshToken })
+                console.log("<= Received tokens!");
+                this.props.history.push({
+                    pathname: '/docs',
+                    state: { username: values.username, accessToken: data.accessToken, refreshToken: data.refreshToken }
+                })
             })
             .catch(error => {
                 console.error('Error logging in!', error);
@@ -56,7 +59,7 @@ export default class Login extends React.Component {
             <>
                 <Header />
 
-                <Alert variant="danger" show={this.state.errorAlertShown} onClose={this.hideAlert} dismissible>
+                <Alert variant="danger" show={this.state.alertShown} onClose={this.hideAlert} dismissible>
                     {this.state.alertContent}
                 </Alert>
 
