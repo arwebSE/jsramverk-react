@@ -4,19 +4,20 @@ import Header from '../layout/Header';
 import Footer from '../layout/Footer';
 import 'react-quill/dist/quill.snow.css';
 import '../styles/editor.scss';
-import { Modal, Button, Table, InputGroup, FormControl, Container, Alert, ToastContainer, Toast } from 'react-bootstrap';
+import { Modal, Button, Table, InputGroup, FormControl, Container, Alert, ToastContainer, Toast, Dropdown } from 'react-bootstrap';
 import socketIOClient from "socket.io-client";
 require("dotenv").config()
 
 let apiUrl;
 if (process.env.NODE_ENV === "development") {
-    console.log("Dev Mode!");
+    console.log("=> Dev Mode!");
     apiUrl = "http://localhost:1337";
 } else {
     apiUrl = "https://jsramverk-editor-auro17.azurewebsites.net";
+    //apiUrl = "https://jsramverk-api.arwebse.repl.co";
 }
 const SAVE_INTERVAL = 10000;
-const TOKEN_INTERVAL = 2000;
+const TOKEN_INTERVAL = 90000;
 
 class Editor extends Component {
     constructor(props) {
@@ -41,7 +42,8 @@ class Editor extends Component {
             toastShow: false,
             username: null,
             accessToken: null,
-            refreshToken: null
+            refreshToken: null,
+            allowedUsers: []
         }
     }
 
@@ -70,7 +72,7 @@ class Editor extends Component {
 
     async componentDidMount() {
         // Handle username with storage
-        if (this.isLoggedIn()) {
+        if (await this.isLoggedIn()) {
             // Setup auto refresh access token
             this.autoRefreshToken();
 
@@ -87,7 +89,7 @@ class Editor extends Component {
             this.socket = sock;
 
             // Refreshing doc list from DB
-            this.firstFetch();
+            await this.firstFetch();
         } else {
             // Username is not set
             console.log("Aborting load.");
@@ -114,8 +116,15 @@ class Editor extends Component {
 
     /* HELPER FUNCTIONS */
 
-    isLoggedIn() {
-        console.log("Stored username:", localStorage.getItem('username'));
+    handleUsersInput = (values) => {
+        let arr = values.split(",").map(function (item) {
+            return item.trim();
+        });
+        this.setState({ allowedUsers: arr })
+    }
+
+    isLoggedIn = async () => {
+        console.log("=> Stored username:", localStorage.getItem('username'));
         if (localStorage.getItem('username') === null) {
             console.log("Looking for loc props...", this.props.location.state);
             if (this.props.location.state !== undefined) {
@@ -152,12 +161,9 @@ class Editor extends Component {
     }
 
     firstFetch = async () => {
-        this.socket.emit("list-documents", this.state.username)
-        await new Promise(resolve => {
-            this.socket.once("list-documents", docs => { resolve(docs); });
-        }).then((docs) => {
-            console.log("<= Received docs:", docs);
-            this.setState({ documents: docs, apiLoaded: true })
+        console.log("=> Requesting docs for the first time this cycle.");
+        const docs = await this.listDocuments();
+        if (docs) {
             let docExists = this.docidExists(docs, this.state.docid);
             if (this.state.docid === undefined) {
                 console.log("=> No docid in URL / no doc opened.");
@@ -170,16 +176,34 @@ class Editor extends Component {
                 console.log("=> document doesnt exist!");
                 this.showAlert("The document doesnt exist!");
             }
-        })
+        } else {
+            console.log("=> Failed to init request docs!", docs);
+        }
     }
 
-    listDocuments() {
-        this.socket.once("listed-documents", docs => {
-            console.log("<= Received docs:", docs);
-            this.setState({ documents: docs, apiLoaded: true })
-        })
-        this.socket.emit("list-documents", this.state.accessToken)
+    listDocuments = async () => {
         console.log("=> Requesting to list docs for user:", this.state.username);
+        const requestOptions = {
+            method: 'GET',
+            headers: { 'Authorization': `Bearer ${this.state.accessToken}` }
+        };
+        fetch(`${apiUrl}/docs`, requestOptions)
+            .then(async response => {
+                const isJson = response.headers.get('content-type')?.includes('application/json');
+                const data = isJson && await response.json();
+
+                if (!response.ok) {
+                    const error = (data && data.message) || response.status;
+                    return Promise.reject(error);
+                }
+                console.log("<= Received docs:", data);
+                this.setState({ documents: data, apiLoaded: true })
+                return data;
+            })
+            .catch(error => {
+                console.error('Error getting docs!', error, "Trying to refresh token...");
+                this.refreshAccessToken(true);
+            });
     }
 
     attachQuillRefs = () => {
@@ -224,14 +248,38 @@ class Editor extends Component {
 
     createDocument = (name, e = null) => {
         if (e) e.preventDefault();
-        if (this.socket == null) { return }
-        this.socket.on("created-document", document => {
-            console.log("<= received created document with name:", document.name, "id:", document._id);
-            console.log("<= opening it...");
-            this.openDocument(document._id)
-        })
-        console.log("=> sending request to create doc with name:", name);
-        this.socket.emit("create-document", name)
+        if (this.state.username == null) { return; }
+
+        let users;
+        if (this.state.allowedUsers) { users = this.state.allowedUsers }
+        else { users = false }
+
+        console.log("=> sending request to create doc with name:", name, "users:", users);
+        const requestOptions = {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${this.state.accessToken}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ name, allowedUsers: users }) // document name, allowed users
+        };
+        fetch(`${apiUrl}/create`, requestOptions)
+            .then(async response => {
+                const isJson = response.headers.get('content-type')?.includes('application/json');
+                const data = isJson && await response.json();
+
+                if (!response.ok) {
+                    const error = (data && data.message) || response.status;
+                    return Promise.reject(error);
+                }
+                console.log("<= Received created document with name:", data.name, "id:", data._id);
+                console.log("<= Opening it...");
+                this.openDocument(data._id)
+                return data;
+            })
+            .catch(error => {
+                console.error('Error creating doc!', error);
+            });
     }
 
     saveDocument = (e = null) => {
@@ -273,23 +321,23 @@ class Editor extends Component {
         }
     }
 
-    autoRefreshToken = () => {
+    autoRefreshToken = async () => {
         if (this.state.refreshToken == null) return;
 
-        this.interval = setInterval(() => {
-            this.refreshAccessToken();
+        this.interval = setInterval(async () => {
+            await this.refreshAccessToken();
         }, TOKEN_INTERVAL)
     }
 
-    refreshAccessToken = () => {
-        if (this.state.refreshToken !== null) {
-            console.log("Requesting to refresh token with:", this.state.refreshToken);
+    refreshAccessToken = async (listAfter) => {
+        if (this.state.refreshToken !== null || localStorage.getItem("refreshToken") !== null) {
+            console.log("=> Requesting to refresh accessToken...");
             const requestOptions = {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ token: this.state.refreshToken })
             };
-            fetch('http://localhost:1337/token', requestOptions)
+            fetch(`${apiUrl}/token`, requestOptions)
                 .then(async response => {
                     const isJson = response.headers.get('content-type')?.includes('application/json');
                     const data = isJson && await response.json();
@@ -299,7 +347,10 @@ class Editor extends Component {
                         console.log("Error refreshing token", data);
                         return Promise.reject(error);
                     }
-                    console.log("Successfully refreshed AccessToken!", data);
+                    console.log("<= Successfully refreshed AccessToken!");
+                    this.setState({ accessToken: data.accessToken })
+                    localStorage.setItem("accessToken", data.accessToken);
+                    if (listAfter) { this.listDocuments(); }
                 })
                 .catch(error => {
                     console.error('Error refreshing atoken!', error);
@@ -320,7 +371,7 @@ class Editor extends Component {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ username: this.state.username, token: this.state.refreshToken })
             };
-            fetch('http://localhost:1337/logout', requestOptions)
+            fetch(`${apiUrl}/logout`, requestOptions)
                 .then(async response => {
                     const isJson = response.headers.get('content-type')?.includes('application/json');
                     const data = isJson && await response.json();
@@ -458,6 +509,11 @@ class Editor extends Component {
                             <InputGroup size="lg">
                                 <InputGroup.Text id="inputGroup-sizing-lg">Name</InputGroup.Text>
                                 <FormControl aria-label="Large" aria-describedby="inputGroup-sizing-sm" onChange={(e) => this.setState({ newDocName: e.target.value })} />
+                            </InputGroup>
+                            <Dropdown.Divider />
+                            <InputGroup>
+                                <InputGroup.Text>Other users (comma separated)</InputGroup.Text>
+                                <FormControl as="textarea" aria-label="Other users (comma separated)" onChange={(e) => this.handleUsersInput(e.target.value)} />
                             </InputGroup>
                         </Modal.Body>
                         <Modal.Footer>
