@@ -7,6 +7,15 @@ import Footer from '../layout/Footer';
 import { Formik } from 'formik';
 import * as yup from 'yup';
 
+let apiUrl;
+if (process.env.NODE_ENV === "development") {
+    console.log("=> Dev Mode!");
+    apiUrl = "http://localhost:1337";
+} else {
+    apiUrl = "https://jsramverk-editor-auro17.azurewebsites.net";
+    //apiUrl = "https://jsramverk-api.arwebse.repl.co";
+}
+
 export default class Login extends React.Component {
     constructor(props) {
         super(props);
@@ -21,6 +30,7 @@ export default class Login extends React.Component {
         password: yup.string().required('Password is required')
     });
 
+
     submit(values) {
         console.log("Submitted values:", values);
         const requestOptions = {
@@ -28,7 +38,7 @@ export default class Login extends React.Component {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ username: values.username, password: values.password })
         };
-        fetch('http://localhost:1337/login', requestOptions)
+        fetch(`${apiUrl}/login`, requestOptions)
             .then(async response => {
                 const isJson = response.headers.get('content-type')?.includes('application/json');
                 const data = isJson && await response.json();

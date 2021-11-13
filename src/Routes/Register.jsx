@@ -7,6 +7,15 @@ import Header from '../layout/Header';
 import Footer from '../layout/Footer';
 import '../styles/login.scss';
 
+let apiUrl;
+if (process.env.NODE_ENV === "development") {
+    console.log("=> Dev Mode!");
+    apiUrl = "http://localhost:1337";
+} else {
+    apiUrl = "https://jsramverk-editor-auro17.azurewebsites.net";
+    //apiUrl = "https://jsramverk-api.arwebse.repl.co";
+}
+
 export default function Register() {
     const [errors, setError] = useState({ status: 0, message: '', error: 0 });
     const [messages, setMessages] = useState('');
@@ -25,7 +34,7 @@ export default function Register() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ username: values.username, password: values.password })
         };
-        fetch('http://localhost:1337/register', requestOptions)
+        fetch(`${apiUrl}/register`, requestOptions)
             .then(async response => {
                 const isJson = response.headers.get('content-type')?.includes('application/json');
                 const data = isJson && await response.json();
