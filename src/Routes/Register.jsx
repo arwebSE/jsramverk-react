@@ -54,7 +54,7 @@ export default function Register() {
                 console.log("Successful registration! data:", data);
                 setMessages(data);
                 setShowSuccessAlert(true);
-                window.location.href = "/#success";
+                window.location.href = "#success";
             })
             .catch((error) => {
                 console.error('Error logging in!', error);
