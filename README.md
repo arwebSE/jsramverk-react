@@ -2,6 +2,8 @@
 
 Used together with https://github.com/arwebSE/jsramverk-api
 
+This client is currently hosted at: http://www.student.bth.se/~auro17/editor/
+
 ## Available Scripts
 
 In the project directory, you can run:
