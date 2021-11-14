@@ -1,8 +1,8 @@
 # AuroDocs React Client
 
-Used together with https://github.com/arwebSE/jsramverk-api
-
 This client is currently hosted at: http://www.student.bth.se/~auro17/editor/
+
+API backend: https://github.com/arwebSE/jsramverk-api
 
 ## Available Scripts
 
