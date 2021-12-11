@@ -1,12 +1,26 @@
-import React, { Component } from 'react';
-import ReactQuill from 'react-quill';
-import Header from '../layout/Header';
-import Footer from '../layout/Footer';
-import 'react-quill/dist/quill.snow.css';
-import '../styles/editor.scss';
-import { Modal, Button, Table, InputGroup, FormControl, Container, Alert, ToastContainer, Toast, Dropdown } from 'react-bootstrap';
+import React, { Component } from "react";
+import ReactQuill from "react-quill";
+import Header from "../layout/Header";
+import Footer from "../layout/Footer";
+import "react-quill/dist/quill.snow.css";
+import "../styles/editor.scss";
+import {
+    Modal,
+    Button,
+    Table,
+    InputGroup,
+    FormControl,
+    Container,
+    Alert,
+    ToastContainer,
+    Toast,
+    Dropdown,
+} from "react-bootstrap";
 import socketIOClient from "socket.io-client";
-require("dotenv").config()
+import { ApolloClient, InMemoryCache, createHttpLink } from "@apollo/client";
+import { setContext } from "@apollo/client/link/context";
+import * as queries from "../graphql/queries";
+require("dotenv").config();
 
 let apiUrl;
 if (process.env.NODE_ENV === "development") {
@@ -22,7 +36,7 @@ const TOKEN_INTERVAL = 90000;
 class Editor extends Component {
     constructor(props) {
         super(props);
-        this.quillRef = null;      // Quill instance
+        this.quillRef = null; // Quill instance
         this.reactQuillRef = null; // ReactQuill component
         this.socket = null;
         this.interval = false;
@@ -43,30 +57,44 @@ class Editor extends Component {
             username: null,
             accessToken: null,
             refreshToken: null,
-            allowedUsers: []
-        }
+            allowedUsers: [],
+            apollo: null,
+        };
     }
 
     modules = {
         toolbar: [
-            [{ 'header': [1, 2, 3, 4, false] }],
-            [{ 'font': [] }],
-            ['bold', 'italic', 'underline', 'strike', 'blockquote'],
-            [{ 'list': 'ordered' }, { 'list': 'bullet' }, { 'indent': '-1' }, { 'indent': '+1' }],
-            [{ 'color': [] }, { 'background': [] }],
-            [{ 'script': "sub" }, { 'script': "super" }],
-            [{ 'align': [] }],
-            ['image', 'link', "blockquote", "code-block"],
-            ['clean']
+            [{ header: [1, 2, 3, 4, false] }],
+            [{ font: [] }],
+            ["bold", "italic", "underline", "strike", "blockquote"],
+            [{ list: "ordered" }, { list: "bullet" }, { indent: "-1" }, { indent: "+1" }],
+            [{ color: [] }, { background: [] }],
+            [{ script: "sub" }, { script: "super" }],
+            [{ align: [] }],
+            ["image", "link", "blockquote", "code-block"],
+            ["clean"],
         ],
-    }
+    };
 
     formats = [
-        'header', 'background', 'font', 'color', 'align', 'code-block', 'script',
-        'bold', 'italic', 'underline', 'strike', 'blockquote',
-        'list', 'bullet', 'indent',
-        'link', 'image'
-    ]
+        "header",
+        "background",
+        "font",
+        "color",
+        "align",
+        "code-block",
+        "script",
+        "bold",
+        "italic",
+        "underline",
+        "strike",
+        "blockquote",
+        "list",
+        "bullet",
+        "indent",
+        "link",
+        "image",
+    ];
 
     /* COMPONENT LIFECYCLE */
 
@@ -78,8 +106,11 @@ class Editor extends Component {
 
             console.log("=> Connecting to API at:", apiUrl);
 
+            // init gql client
+            this.initApolloClient();
+
             // Attaching Quill
-            this.attachQuillRefs()
+            this.attachQuillRefs();
 
             //this.quillRef.disable();
             this.quillRef.setText("Loading...");
@@ -93,7 +124,7 @@ class Editor extends Component {
         } else {
             // Username is not set
             console.log("Aborting load.");
-            this.props.history.push({ pathname: '/login' })
+            this.props.history.push({ pathname: "/login" });
         }
     }
 
@@ -111,54 +142,78 @@ class Editor extends Component {
     }
 
     componentDidUpdate() {
-        this.attachQuillRefs()
+        this.attachQuillRefs();
     }
 
     /* HELPER FUNCTIONS */
+
+    initApolloClient = () => {
+        const httpLink = createHttpLink({ uri: `${apiUrl}/graphql` });
+        const authLink = setContext((_, { headers }) => {
+            const token = this.state.accessToken;
+            return {
+                headers: {
+                    ...headers,
+                    "Content-Type": "application/json",
+                    authorization: token ? `Bearer ${token}` : "",
+                },
+            };
+        });
+
+        const apollo = new ApolloClient({
+            link: authLink.concat(httpLink),
+            cache: new InMemoryCache(),
+        });
+        this.setState({ apollo }); // Store apollo ref in state var
+    };
 
     handleUsersInput = (values) => {
         let arr = values.split(",").map(function (item) {
             return item.trim();
         });
-        this.setState({ allowedUsers: arr })
-    }
+        this.setState({ allowedUsers: arr });
+    };
 
     isLoggedIn = async () => {
-        console.log("=> Stored username:", localStorage.getItem('username'));
-        if (localStorage.getItem('username') === null) {
+        console.log("=> Stored username:", localStorage.getItem("username"));
+        if (localStorage.getItem("username") === null) {
             console.log("Looking for loc props...", this.props.location.state);
             if (this.props.location.state !== undefined) {
                 this.setState({
                     username: this.props.location.state.username,
                     accessToken: this.props.location.state.accessToken,
-                    refreshToken: this.props.location.state.refreshToken
-                })
+                    refreshToken: this.props.location.state.refreshToken,
+                });
                 localStorage.setItem("username", this.props.location.state.username);
-                localStorage.setItem("accessToken", this.props.location.state.accessToken); // UNSECURE, TODO: FIGURE OUT SOMETHING BETTER
-                localStorage.setItem("refreshToken", this.props.location.state.refreshToken); // UNSECURE, TODO: FIGURE OUT SOMETHING BETTER
-                console.log("Got loc props! Set username to:", this.props.location.state.username, "and saved tokens to LS. (unsecure)");
+                localStorage.setItem("accessToken", this.props.location.state.accessToken); // UNSECURE
+                localStorage.setItem("refreshToken", this.props.location.state.refreshToken); // UNSECURE
+                console.log(
+                    "Got loc props! Set username to:",
+                    this.props.location.state.username,
+                    "and saved tokens to LS. (unsecure)"
+                );
                 return true;
             } else {
                 console.log("Couldnt get loc props and not logged in. Back to login...", this.state.username);
-                this.props.history.push({ pathname: '/login' })
+                this.props.history.push({ pathname: "/login" });
             }
         } else {
-            // UNSECURE, TODO: FIGURE OUT SOMETHING BETTER
+            // UNSECURE
             this.setState({
-                username: localStorage.getItem('username'),
-                accessToken: localStorage.getItem('accessToken'),
-                refreshToken: localStorage.getItem('refreshToken')
-            })
+                username: localStorage.getItem("username"),
+                accessToken: localStorage.getItem("accessToken"),
+                refreshToken: localStorage.getItem("refreshToken"),
+            });
             return true;
         }
         return;
-    }
+    };
 
     docidExists = (docs, docid) => {
         return docs.some(function (el) {
             return el._id === docid;
         });
-    }
+    };
 
     firstFetch = async () => {
         console.log("=> Requesting docs for the first time this cycle.");
@@ -179,47 +234,42 @@ class Editor extends Component {
         } else {
             console.log("=> Failed to init request docs!", docs);
         }
-    }
+    };
 
     listDocuments = async () => {
         console.log("=> Requesting to list docs for user:", this.state.username);
-        const requestOptions = {
-            method: 'GET',
-            headers: { 'Authorization': `Bearer ${this.state.accessToken}` }
-        };
-        fetch(`${apiUrl}/docs`, requestOptions)
-            .then(async response => {
-                const isJson = response.headers.get('content-type')?.includes('application/json');
-                const data = isJson && await response.json();
 
-                if (!response.ok) {
-                    const error = (data && data.message) || response.status;
-                    return Promise.reject(error);
-                }
-                console.log("<= Received docs:", data);
-                this.setState({ documents: data, apiLoaded: true })
-                return data;
+        this.state.apollo
+            .query({
+                query: queries.LIST_USER_DOCUMENTS,
+                variables: { user: this.state.username },
             })
-            .catch(error => {
-                console.error('Error getting docs!', error, "Trying to refresh token...");
+            .then((result) => {
+                const docs = result.data.documents;
+                this.setState({ documents: docs, apiLoaded: true });
+            })
+            .catch((error) => {
+                console.error("Error getting docs!", error, "Trying to refresh token...");
                 this.refreshAccessToken(true);
             });
-    }
+    };
 
     attachQuillRefs = () => {
-        if (typeof this.reactQuillRef.getEditor !== 'function') return;
+        if (typeof this.reactQuillRef.getEditor !== "function") return;
         this.quillRef = this.reactQuillRef.getEditor();
-    }
+    };
 
     receiveChanges() {
-        console.log("=> Now accepting realtime changes!");
+        console.log("=> Receive changes called.");
         if (this.socket == null || this.quillRef == null) return;
-        this.socket.once("receive-changes", (delta) => { // DEBUG
+        console.log("=> Now accepting realtime changes!");
+        this.socket.once("receive-changes", (delta) => {
+            // DEBUG
             console.log("<= Received changes!", delta);
-        })
-        this.socket.on("receive-changes", delta => {
+        });
+        this.socket.on("receive-changes", (delta) => {
             this.quillRef.updateContents(delta);
-        })
+        });
         this.setState({ userChanged: false });
     }
 
@@ -229,72 +279,87 @@ class Editor extends Component {
             console.log("=> socket:", this.socket, "quillref:", this.quillRef);
             return;
         }
-        if (docid !== this.props.match.params.id) { // if on wrong url
+        if (docid !== this.props.match.params.id) {
+            // if on wrong url
             console.log("=> redirecting to correct url");
-            this.props.history.push(`/docs/${docid}`)
+            this.props.history.push(`/docs/${docid}`);
         }
-        this.socket.once("load-document", document => {
-            console.log("<= Received initial content:", document.data);
-            this.setState({ docid: docid, userChanged: false }) // important to ignore changes fetched
-            this.quillRef.setContents(document.data, 'api');
-            this.quillRef.enable();
-        })
+
         console.log("=> Calling API to send doc:", docid);
-        this.socket.emit("get-document", docid)
-        this.receiveChanges();
-        this.autoSave(); // Setup autosave
-        this.hideAlert();
-    }
+
+        this.state.apollo
+            .query({
+                query: queries.OPEN_DOCUMENT,
+                variables: { docid: this.state.docid },
+            })
+            .then((result) => {
+                const docid = result.data.openDoc._id;
+                const data = JSON.parse(result.data.openDoc.data);
+                console.log("<= Received initial content:", data);
+                this.setState({ docid, userChanged: false }); // important to ignore changes fetched
+                this.quillRef.setContents(data, "api");
+                this.quillRef.enable();
+
+                this.socket.emit("get-document", docid);
+                this.receiveChanges();
+                this.autoSave(); // Setup autosave
+                this.hideAlert();
+            })
+            .catch((error) => {
+                console.error("Error getting doc!", error);
+                this.refreshAccessToken(true);
+            });
+    };
 
     createDocument = (name, e = null) => {
         if (e) e.preventDefault();
-        if (this.state.username == null) { return; }
+        if (this.state.username == null) return;
 
-        let users;
-        if (this.state.allowedUsers) { users = this.state.allowedUsers }
-        else { users = false }
+        // Add any additional users if given
+        let users = [this.state.username];
+        if (this.state.allowedUsers.length > 0) {
+            users = users.concat(this.state.allowedUsers);
+        }
 
         console.log("=> sending request to create doc with name:", name, "users:", users);
-        const requestOptions = {
-            method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${this.state.accessToken}`,
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ name, allowedUsers: users }) // document name, allowed users
-        };
-        fetch(`${apiUrl}/create`, requestOptions)
-            .then(async response => {
-                const isJson = response.headers.get('content-type')?.includes('application/json');
-                const data = isJson && await response.json();
 
-                if (!response.ok) {
-                    const error = (data && data.message) || response.status;
-                    return Promise.reject(error);
-                }
+        this.state.apollo
+            .mutate({
+                mutation: queries.CREATE_DOCUMENT,
+                variables: { name, users },
+            })
+            .then((result) => {
+                const data = result.data.createDoc;
                 console.log("<= Received created document with name:", data.name, "id:", data._id);
                 console.log("<= Opening it...");
-                this.openDocument(data._id)
-                return data;
+                this.openDocument(data._id);
             })
-            .catch(error => {
-                console.error('Error creating doc!', error);
+            .catch((error) => {
+                console.error("Error creating doc!", error);
             });
-    }
+    };
 
     saveDocument = (e = null) => {
         if (e) e.preventDefault();
-        if (this.socket == null || this.quillRef == null || this.state.docid === undefined) {
-            console.log("=> couldnt save. sock:", this.socket, "quillref:", this.quillRef, "docid:", this.state.docid);
+        if (this.quillRef == null || this.state.docid === undefined) {
+            console.log("=> couldnt save. quillref:", this.quillRef, "docid:", this.state.docid);
             return;
         }
-        this.socket.once("saved-status", (status) => {
-            console.log("<= Received save status:", status)
-        })
-        this.socket.emit("save-document", this.state.docid, this.quillRef.getContents())
-        console.log("=> Saved! data:", this.quillRef.getContents());
-        this.setState({ toastShow: true });
-    }
+
+        const data = JSON.stringify(this.quillRef.getContents());
+        this.state.apollo
+            .mutate({
+                mutation: queries.UPDATE_DOCUMENT,
+                variables: { docid: this.state.docid, data },
+            })
+            .then((result) => {
+                console.log("=> Saved! data:", this.quillRef.getContents());
+                this.setState({ toastShow: true });
+            })
+            .catch((error) => {
+                console.error("Error saving doc!", error);
+            });
+    };
 
     autoSave = () => {
         if (this.socket == null || this.quillRef == null) return;
@@ -304,43 +369,43 @@ class Editor extends Component {
             if (this.state.userChanged) {
                 console.log("=> User has edited! Going to autosave...");
                 if (elapsed > SAVE_INTERVAL) {
-                    console.log('=> AUTOSAVED!');
+                    console.log("=> AUTOSAVED!");
                     this.saveDocument();
                     this.setState({ userChanged: false }); // resetting var
                 }
             } else {
                 console.log("=> Skipping autosave (user hasn't edited)...");
             }
-        }, SAVE_INTERVAL)
-    }
+        }, SAVE_INTERVAL);
+    };
 
     saveKeysHandler = (e) => {
         if (e.key === "s" && e.ctrlKey) {
             e.preventDefault();
             this.saveDocument();
         }
-    }
+    };
 
     autoRefreshToken = async () => {
         if (this.state.refreshToken == null) return;
 
         this.interval = setInterval(async () => {
             await this.refreshAccessToken();
-        }, TOKEN_INTERVAL)
-    }
+        }, TOKEN_INTERVAL);
+    };
 
     refreshAccessToken = async (listAfter) => {
         if (this.state.refreshToken !== null || localStorage.getItem("refreshToken") !== null) {
             console.log("=> Requesting to refresh accessToken...");
             const requestOptions = {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ token: this.state.refreshToken })
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ token: this.state.refreshToken }),
             };
             fetch(`${apiUrl}/token`, requestOptions)
-                .then(async response => {
-                    const isJson = response.headers.get('content-type')?.includes('application/json');
-                    const data = isJson && await response.json();
+                .then(async (response) => {
+                    const isJson = response.headers.get("content-type")?.includes("application/json");
+                    const data = isJson && (await response.json());
 
                     if (!response.ok) {
                         const error = (data && data.message) || response.status;
@@ -348,17 +413,19 @@ class Editor extends Component {
                         return Promise.reject(error);
                     }
                     console.log("<= Successfully refreshed AccessToken!");
-                    this.setState({ accessToken: data.accessToken })
+                    this.setState({ accessToken: data.accessToken });
                     localStorage.setItem("accessToken", data.accessToken);
-                    if (listAfter) { this.listDocuments(); }
+                    if (listAfter) {
+                        this.listDocuments();
+                    }
                 })
-                .catch(error => {
-                    console.error('Error refreshing atoken!', error);
+                .catch((error) => {
+                    console.error("Error refreshing atoken!", error);
                 });
         } else {
             console.log("RefreshToken is null!! this shudnt happen");
         }
-    }
+    };
 
     handleLogout = (e = null) => {
         if (e) e.preventDefault();
@@ -367,14 +434,14 @@ class Editor extends Component {
         if (this.state.refreshToken !== null) {
             console.log("Requesting to remove rftoken:", this.state.refreshToken);
             const requestOptions = {
-                method: 'DELETE',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ username: this.state.username, token: this.state.refreshToken })
+                method: "DELETE",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ username: this.state.username, token: this.state.refreshToken }),
             };
             fetch(`${apiUrl}/logout`, requestOptions)
-                .then(async response => {
-                    const isJson = response.headers.get('content-type')?.includes('application/json');
-                    const data = isJson && await response.json();
+                .then(async (response) => {
+                    const isJson = response.headers.get("content-type")?.includes("application/json");
+                    const data = isJson && (await response.json());
 
                     if (!response.ok) {
                         const error = (data && data.message) || response.status;
@@ -383,26 +450,26 @@ class Editor extends Component {
                     }
                     console.log("Successfully removed rftoken!");
                     this.props.history.push({
-                        pathname: '/logout'
-                    })
+                        pathname: "/logout",
+                    });
                 })
-                .catch(error => {
-                    console.error('Error logging out!', error);
+                .catch((error) => {
+                    console.error("Error logging out!", error);
                 });
         } else {
             console.log("RefreshToken not set. Skipping DELETE request.");
             this.props.history.push({
-                pathname: '/logout'
-            })
+                pathname: "/logout",
+            });
         }
-    }
+    };
 
     /* MISC FUNCTIONS */
 
     printEditData = (e = null) => {
         if (e) e.preventDefault();
-        console.log("Data:", this.state.editData)
-    }
+        console.log("Data:", this.state.editData);
+    };
 
     handleChange = (html, delta, source, editor) => {
         // Making sure socket and Quill are attached
@@ -412,31 +479,63 @@ class Editor extends Component {
         // console.log("Sending changes:", delta); // DEBUG
         this.socket.emit("send-changes", delta);
         this.timeSinceEdit = Date.now(); // set timer to last edit
-    }
+    };
 
     resetDB = (e = null) => {
         if (e) e.preventDefault();
-        if (this.socket == null) return;
-        this.socket.on("resetdb", () => {
-            console.log("<= DB reset OK!")
-        })
-        console.log("=> Sending reset request...");
-        this.socket.emit("resetdb")
-    }
+        this.state.apollo
+            .query({
+                query: queries.RESET_DB,
+            })
+            .then((result) => {
+                console.log("<= Deleted", result.data.resetDocs.deletedCount, "entries.");
+            })
+            .catch((error) => {
+                console.error("<= Error resetting DB:", error);
+            });
+    };
 
     /* TOGGLES */
-    showOpenModal = () => { this.listDocuments(); this.setState({ openModalShown: true }); }
-    hideOpenModal = () => { this.setState({ openModalShown: false }) }
-    showNewModal = () => { this.setState({ newModalShown: true }) }
-    hideNewModal = () => { this.setState({ newModalShown: false }) }
-    showAlert = (content) => { this.setState({ alertShown: true, alertContent: content }) }
-    hideAlert = () => { this.setState({ alertShown: false }) }
+    showOpenModal = () => {
+        this.listDocuments();
+        this.setState({ openModalShown: true });
+    };
+    hideOpenModal = () => {
+        this.setState({ openModalShown: false });
+    };
+    showNewModal = () => {
+        this.setState({ newModalShown: true });
+        this.setState({ allowedUsers: [] }); // reset var
+    };
+    hideNewModal = () => {
+        this.setState({ newModalShown: false });
+    };
+    showAlert = (content) => {
+        this.setState({ alertShown: true, alertContent: content });
+    };
+    hideAlert = () => {
+        this.setState({ alertShown: false });
+    };
     /* TOGGLES END */
 
     render() {
-        const { error, documents, openModalShown, newModalShown, editData, newDocName, alertShown, apiLoaded, alertContent, toastShow, username } = this.state;
+        const {
+            error,
+            documents,
+            openModalShown,
+            newModalShown,
+            editData,
+            newDocName,
+            alertShown,
+            apiLoaded,
+            alertContent,
+            toastShow,
+            username,
+        } = this.state;
 
-        if (error) { console.log("Error:", error.message) }
+        if (error) {
+            console.log("Error:", error.message);
+        }
 
         return (
             <>
@@ -444,11 +543,12 @@ class Editor extends Component {
                     {alertContent}
                 </Alert>
 
-                <Header editor={true}
+                <Header
+                    editor={true}
                     new={this.showNewModal}
                     open={this.showOpenModal}
                     save={this.saveDocument}
-                    print={e => this.printEditData(e)}
+                    print={(e) => this.printEditData(e)}
                     reset={this.resetDB}
                     username={username}
                     logout={this.handleLogout}
@@ -457,8 +557,10 @@ class Editor extends Component {
                 <main className="editor">
                     <Container>
                         <ReactQuill
-                            ref={(el) => { this.reactQuillRef = el }}
-                            theme={'snow'}
+                            ref={(el) => {
+                                this.reactQuillRef = el;
+                            }}
+                            theme={"snow"}
                             modules={this.modules}
                             formats={this.formats}
                             value={editData}
@@ -467,7 +569,12 @@ class Editor extends Component {
                     </Container>
 
                     <ToastContainer position="top-end" className="p-3">
-                        <Toast onClose={() => this.setState({ toastShow: false })} show={toastShow} delay={4000} autohide>
+                        <Toast
+                            onClose={() => this.setState({ toastShow: false })}
+                            show={toastShow}
+                            delay={4000}
+                            autohide
+                        >
                             <Toast.Header>
                                 <strong className="me-auto">Notice</strong>
                                 <small className="text-muted">just now</small>
@@ -482,22 +589,33 @@ class Editor extends Component {
                         </Modal.Header>
                         <Modal.Body>
                             {!apiLoaded && "Loading..."}
-                            {apiLoaded &&
+                            {apiLoaded && (
                                 <Table striped hover>
-                                    <tbody>{documents.map(document =>
-                                        <tr key={document._id}>
-                                            <td>
-                                                <Button variant="link" value={document._id} onClick={e => { this.openDocument(document._id, e); this.hideOpenModal(); }}>
-                                                    {document.name} (ID: {document._id})
-                                                </Button>
-                                            </td>
-                                        </tr>)
-                                    }</tbody>
+                                    <tbody>
+                                        {documents.map((document) => (
+                                            <tr key={document._id}>
+                                                <td>
+                                                    <Button
+                                                        variant="link"
+                                                        value={document._id}
+                                                        onClick={(e) => {
+                                                            this.openDocument(document._id, e);
+                                                            this.hideOpenModal();
+                                                        }}
+                                                    >
+                                                        {document.name} (ID: {document._id})
+                                                    </Button>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
                                 </Table>
-                            }
+                            )}
                         </Modal.Body>
                         <Modal.Footer>
-                            <Button variant="primary" onClick={this.hideOpenModal}>Close</Button>
+                            <Button variant="primary" onClick={this.hideOpenModal}>
+                                Close
+                            </Button>
                         </Modal.Footer>
                     </Modal>
 
@@ -508,24 +626,42 @@ class Editor extends Component {
                         <Modal.Body>
                             <InputGroup size="lg">
                                 <InputGroup.Text id="inputGroup-sizing-lg">Name</InputGroup.Text>
-                                <FormControl aria-label="Large" aria-describedby="inputGroup-sizing-sm" onChange={(e) => this.setState({ newDocName: e.target.value })} />
+                                <FormControl
+                                    aria-label="Large"
+                                    aria-describedby="inputGroup-sizing-sm"
+                                    onChange={(e) => this.setState({ newDocName: e.target.value })}
+                                />
                             </InputGroup>
                             <Dropdown.Divider />
                             <InputGroup>
                                 <InputGroup.Text>Other users (comma separated)</InputGroup.Text>
-                                <FormControl as="textarea" aria-label="Other users (comma separated)" onChange={(e) => this.handleUsersInput(e.target.value)} />
+                                <FormControl
+                                    as="textarea"
+                                    aria-label="Other users (comma separated)"
+                                    onChange={(e) => this.handleUsersInput(e.target.value)}
+                                />
                             </InputGroup>
                         </Modal.Body>
                         <Modal.Footer>
-                            <Button variant="primary" onClick={(e) => { this.createDocument(newDocName, e); this.hideNewModal(); }}>Save</Button>
-                            <Button variant="secondary" onClick={this.hideNewModal}>Close</Button>
+                            <Button
+                                variant="primary"
+                                onClick={(e) => {
+                                    this.createDocument(newDocName, e);
+                                    this.hideNewModal();
+                                }}
+                            >
+                                Save
+                            </Button>
+                            <Button variant="secondary" onClick={this.hideNewModal}>
+                                Close
+                            </Button>
                         </Modal.Footer>
                     </Modal>
                 </main>
 
                 <Footer />
             </>
-        )
+        );
     }
 }
 
