@@ -9,22 +9,6 @@
     }
 }
 
-.btn-primary {
-    $prpl: #5785ce;
-    $trprpl: transparentize($prpl, 0.5);
-    background-color: $prpl;
-    border-color: $prpl;
-    &:active,
-    &:focus {
-        background-color: darken($prpl, 10);
-        border-color: darken($prpl, 10);
-        box-shadow: 0 0 0 0.25rem darken($trprpl, 10) !important;
-    }
-    &:hover {
-        background-color: darken($prpl, 10);
-    }
-}
-
 .logotitle {
     color: rgb(73, 73, 73);
     font-weight: bolder;

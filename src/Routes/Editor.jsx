@@ -136,8 +136,13 @@ class Editor extends Component {
             console.log("=> Removed all socket listeners.");
             document.removeEventListener("keydown", this.saveKeysHandler); // removes ctrl+s listener
         }
+        console.log("intervals:", this.interval);
         if (this.interval) {
+            console.log("Clearing interval!", this.interval);
             clearInterval(this.interval);
+        }
+        if (this.state.apollo !== null) {
+            this.setState({ apollo: null });
         }
     }
 
@@ -215,24 +220,31 @@ class Editor extends Component {
         });
     };
 
-    firstFetch = async () => {
+    firstFetch = async (docslist = null) => {
         console.log("=> Requesting docs for the first time this cycle.");
-        const docs = await this.listDocuments();
-        if (docs) {
-            let docExists = this.docidExists(docs, this.state.docid);
-            if (this.state.docid === undefined) {
-                console.log("=> No docid in URL / no doc opened.");
-                this.showAlert("Please open or create a document.");
-            } else if (docExists) {
-                console.log("=> Document exists! Opening...");
-                this.openDocument(this.state.docid); // Open document based off route
-                document.addEventListener("keydown", this.saveKeysHandler);
-            } else {
-                console.log("=> document doesnt exist!");
-                this.showAlert("The document doesnt exist!");
-            }
+        if (docslist === null) {
+            // If no docs are loaded, query docs list.
+            await this.listDocuments();
+        } else if (docslist === false) {
+            console.log("=> Failed to fetch docs.");
         } else {
-            console.log("=> Failed to init request docs!", docs);
+            if (docslist) {
+                // Check if document is selected and exists in list.
+                let docExists = this.docidExists(docslist, this.state.docid);
+                if (this.state.docid === undefined) {
+                    console.log("=> No docid in URL / no doc opened.");
+                    this.showAlert("Please open or create a document.");
+                } else if (docExists) {
+                    console.log("=> Document exists! Opening...");
+                    this.openDocument(this.state.docid); // Open document based off route
+                    document.addEventListener("keydown", this.saveKeysHandler);
+                } else {
+                    console.log("=> Document doesnt exist!");
+                    this.showAlert("The document doesn't exist!");
+                }
+            } else {
+                console.log("=> Failed to init request docs!", docslist);
+            }
         }
     };
 
@@ -247,10 +259,13 @@ class Editor extends Component {
             .then((result) => {
                 const docs = result.data.documents;
                 this.setState({ documents: docs, apiLoaded: true });
+                console.log("<= Recieved docs list:", docs);
+                this.firstFetch(docs); // callback
             })
             .catch((error) => {
                 console.error("Error getting docs!", error, "Trying to refresh token...");
                 this.refreshAccessToken(true);
+                this.firstFetch(false); // callback. tell list firstfetch it failed
             });
     };
 
@@ -290,12 +305,19 @@ class Editor extends Component {
         this.state.apollo
             .query({
                 query: queries.OPEN_DOCUMENT,
-                variables: { docid: this.state.docid },
+                variables: { docid },
             })
             .then((result) => {
                 const docid = result.data.openDoc._id;
-                const data = JSON.parse(result.data.openDoc.data);
-                console.log("<= Received initial content:", data);
+                let data = JSON.parse(result.data.openDoc.data);
+                console.log("<= Response to openDoc query:", result);
+                if (data === null) {
+                    data = "";
+                    console.log("<= Fetched document is empty.");
+                } else {
+                    console.log("<= Received initial content:", data);
+                }
+
                 this.setState({ docid, userChanged: false }); // important to ignore changes fetched
                 this.quillRef.setContents(data, "api");
                 this.quillRef.enable();
