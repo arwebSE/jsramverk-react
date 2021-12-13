@@ -12,9 +12,11 @@
         "@testing-library/user-event": "^12.1.10",
         "bootstrap": "5.1.1",
         "dotenv": "^10.0.0",
+        "file-saver": "^2.0.5",
         "formik": "^2.2.9",
         "graphql": "^16.1.0",
         "node-sass": "^6.0.1",
+        "quill-to-pdf": "^1.0.7",
         "react": "^17.0.2",
         "react-bootstrap": "^2.0.0-rc.0",
         "react-dom": "^17.0.2",
@@ -32,7 +34,7 @@
         "test": "react-scripts test",
         "eject": "react-scripts eject",
         "deploy": "yarn build && rsync -av --delete build/ auro17@ssh.student.bth.se:www/editor",
-        "justsend": "rsync -av --delete build/ auro17@ssh.student.bth.se:www/editor"
+        "upload": "rsync -av --delete build/ auro17@ssh.student.bth.se:www/editor"
     },
     "eslintConfig": {
         "extends": [

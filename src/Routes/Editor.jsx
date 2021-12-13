@@ -20,6 +20,9 @@ import socketIOClient from "socket.io-client";
 import { ApolloClient, InMemoryCache, createHttpLink } from "@apollo/client";
 import { setContext } from "@apollo/client/link/context";
 import * as queries from "../graphql/queries";
+import { saveAs } from "file-saver";
+import { pdfExporter } from "quill-to-pdf";
+
 require("dotenv").config();
 
 let apiUrl;
@@ -59,6 +62,7 @@ class Editor extends Component {
             refreshToken: null,
             allowedUsers: [],
             apollo: null,
+            comments: null
         };
     }
 
@@ -152,6 +156,62 @@ class Editor extends Component {
 
     /* HELPER FUNCTIONS */
 
+    handleComment = (e) => {
+        if (e) e.preventDefault();
+        if (this.quillRef == null || this.state.docid === undefined) {
+            console.log("=> Couldn't make comment. quillref:", this.quillRef, "docid:", this.state.docid);
+            return;
+        }
+        let prompt = window.prompt("Please enter Comment", "");
+        let txt;
+        let metadata;
+        if (prompt == null || prompt === "") {
+            txt = "User cancelled the prompt.";
+        } else {
+            let selection = this.quillRef.getSelection();
+            if (selection) {
+                if (selection.length === 0) {
+                    alert("Please select text", selection.index);
+                } else {
+                    let text = this.quillRef.getText(selection.index, selection.length);
+                    console.log("User has highlighted: ", text);
+                    
+                    metadata.push({ range: selection, comment: prompt });
+                    this.quillRef.formatText(selection.index, selection.length, {
+                        background: "#fff72b",
+                    });
+                    this.drawComments(metadata);
+                }
+            } else {
+                alert("User cursor is not in editor");
+            }
+        }
+    };
+
+    drawComments = (metadata) => {
+        let content = "";
+        metadata.forEach(function (value, index) {
+            content +=
+            "<a class='comment-link' href='#' data-index='" +
+            index +
+            "'><li class='list-group-item'>" +
+            value.comment +
+            "</li></a>";
+        });
+        this.setState({ comments: content });
+    }
+
+    handlePDF = async (e = null) => {
+        if (e) e.preventDefault();
+        if (this.quillRef == null || this.state.docid === undefined) {
+            console.log("=> Couldn't make PDF. quillref:", this.quillRef, "docid:", this.state.docid);
+            return;
+        }
+        const delta = this.quillRef.getContents();
+        const pdfAsBlob = await pdfExporter.generatePdf(delta); // converts to PDF
+        saveAs(pdfAsBlob, "pdf-export.pdf"); // downloads from the browser
+    };
+
     initApolloClient = () => {
         const httpLink = createHttpLink({ uri: `${apiUrl}/graphql` });
         const authLink = setContext((_, { headers }) => {
@@ -199,7 +259,7 @@ class Editor extends Component {
                 );
                 return true;
             } else {
-                console.log("Couldnt get loc props and not logged in. Back to login...", this.state.username);
+                console.log("Couldn't get loc props and not logged in. Back to login...", this.state.username);
                 this.props.history.push({ pathname: "/login" });
             }
         } else {
@@ -364,7 +424,7 @@ class Editor extends Component {
     saveDocument = (e = null) => {
         if (e) e.preventDefault();
         if (this.quillRef == null || this.state.docid === undefined) {
-            console.log("=> couldnt save. quillref:", this.quillRef, "docid:", this.state.docid);
+            console.log("=> Couldn't save. quillref:", this.quillRef, "docid:", this.state.docid);
             return;
         }
 
@@ -574,6 +634,8 @@ class Editor extends Component {
                     reset={this.resetDB}
                     username={username}
                     logout={this.handleLogout}
+                    pdf={(e) => this.handlePDF(e)}
+                    comment={(e) => this.handleComment(e)}
                 />
 
                 <main className="editor">

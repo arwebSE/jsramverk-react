@@ -1,3 +1,7 @@
+$prpl: #53188a;
+$blu: #2a4f8a;
+$prplborder: lighten($prpl, 40);
+
 .dropdown-toggle {
     margin: 5px;
     color: white !important;
@@ -12,37 +16,20 @@
     font-family: 'Assistant', sans-serif;
 }
 
-.btn-info {
-    $ltblu: #3495bb;
-    $trltblu: transparentize($ltblu, 0.5);
-    background-color: $ltblu;
-    border-color: lighten($ltblu, 20);
-    &:active,
-    &:focus {
-        background-color: darken($ltblu, 10);
-        border-color: darken($ltblu, 10);
-        box-shadow: 0 0 0 0.25rem darken($trltblu, 10) !important;
-    }
-    &:hover {
-        background-color: darken($ltblu, 10);
-    }
-}
 
 .btn-dark {
-    $prpl: #53188a;
-    background-color: #53188a;
-    border-color: lighten($prpl, 40);
+    background-color: $prpl;
+    border-color: $prplborder;
 }
 
 .btn-primary {
-    $blu: #2461c4;
     $trblu: transparentize($blu, 0.5);
     background-color: $blu;
-    border-color: lighten($blu, 30);
+    border-color: lighten($blu, 30) !important;
     &:active,
-    &:focus {
-        background-color: darken($blu, 10);
-        border-color: darken($blu, 10);
+    &:focus,
+    .show>&.dropdown-toggle {
+        background-color: darken($blu, 15) !important;
         box-shadow: 0 0 0 0.25rem darken($trblu, 10) !important;
     }
     &:hover {
