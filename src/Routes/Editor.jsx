@@ -4,24 +4,15 @@ import Header from "../layout/Header";
 import Footer from "../layout/Footer";
 import "react-quill/dist/quill.snow.css";
 import "../styles/editor.scss";
-import {
-    Modal,
-    Button,
-    Table,
-    InputGroup,
-    FormControl,
-    Container,
-    Alert,
-    ToastContainer,
-    Toast,
-    Dropdown,
-} from "react-bootstrap";
+import { Modal, Button, Table, InputGroup, FormControl, Container, Alert, Dropdown } from "react-bootstrap";
 import socketIOClient from "socket.io-client";
 import { ApolloClient, InMemoryCache, createHttpLink } from "@apollo/client";
 import { setContext } from "@apollo/client/link/context";
 import * as queries from "../graphql/queries";
 import { saveAs } from "file-saver";
 import { pdfExporter } from "quill-to-pdf";
+import Comments from "../components/Comments";
+import Notification from "../components/Notification";
 
 require("dotenv").config();
 
@@ -34,7 +25,7 @@ if (process.env.NODE_ENV === "development") {
     //apiUrl = "https://jsramverk-api.arwebse.repl.co";
 }
 const SAVE_INTERVAL = 10000;
-const TOKEN_INTERVAL = 90000;
+const TOKEN_INTERVAL = 250000; // 300k = 5min
 
 class Editor extends Component {
     constructor(props) {
@@ -62,7 +53,9 @@ class Editor extends Component {
             refreshToken: null,
             allowedUsers: [],
             apollo: null,
-            comments: null
+            comments: null,
+            showComments: true,
+            toastContent: "",
         };
     }
 
@@ -140,7 +133,6 @@ class Editor extends Component {
             console.log("=> Removed all socket listeners.");
             document.removeEventListener("keydown", this.saveKeysHandler); // removes ctrl+s listener
         }
-        console.log("intervals:", this.interval);
         if (this.interval) {
             console.log("Clearing interval!", this.interval);
             clearInterval(this.interval);
@@ -159,47 +151,40 @@ class Editor extends Component {
     handleComment = (e) => {
         if (e) e.preventDefault();
         if (this.quillRef == null || this.state.docid === undefined) {
-            console.log("=> Couldn't make comment. quillref:", this.quillRef, "docid:", this.state.docid);
+            console.log("=> Comment: Couldn't make comment. quillref:", this.quillRef, "docid:", this.state.docid);
             return;
         }
-        let prompt = window.prompt("Please enter Comment", "");
-        let txt;
-        let metadata;
+        let prompt = window.prompt("Enter comment text:", "");
+        let metadata = [];
         if (prompt == null || prompt === "") {
-            txt = "User cancelled the prompt.";
+            console.log("=> Comment: Cancelled propmt.");
         } else {
-            let selection = this.quillRef.getSelection();
+            let selection = this.quillRef.getSelection(true); // focus = true
             if (selection) {
                 if (selection.length === 0) {
-                    alert("Please select text", selection.index);
+                    console.log("=> Comment: Selection length 0:", selection.index);
+                    this.showAlert("Please select text first.");
                 } else {
                     let text = this.quillRef.getText(selection.index, selection.length);
-                    console.log("User has highlighted: ", text);
-                    
+                    console.log("=> Comment: Text selected:", text);
+
                     metadata.push({ range: selection, comment: prompt });
-                    this.quillRef.formatText(selection.index, selection.length, {
-                        background: "#fff72b",
-                    });
-                    this.drawComments(metadata);
+                    this.quillRef.formatText(selection.index, selection.length, { background: "#fff72b" });
+                    if (this.state.comments === null) {
+                        console.log("meta1", metadata);
+                        this.setState({ comments: metadata });
+                    } else {
+                        console.log("meta2", metadata);
+                        let arr = this.state.comments;
+                        arr = arr.concat(metadata);
+                        this.setState({ comments: arr });
+                    }
                 }
             } else {
-                alert("User cursor is not in editor");
+                this.showAlert("Cursor was not in editor!");
             }
         }
     };
-
-    drawComments = (metadata) => {
-        let content = "";
-        metadata.forEach(function (value, index) {
-            content +=
-            "<a class='comment-link' href='#' data-index='" +
-            index +
-            "'><li class='list-group-item'>" +
-            value.comment +
-            "</li></a>";
-        });
-        this.setState({ comments: content });
-    }
 
     handlePDF = async (e = null) => {
         if (e) e.preventDefault();
@@ -436,7 +421,7 @@ class Editor extends Component {
             })
             .then((result) => {
                 console.log("=> Saved! data:", this.quillRef.getContents());
-                this.setState({ toastShow: true });
+                this.setState({ toastShow: true, toastContent: "The document was saved." });
             })
             .catch((error) => {
                 console.error("Error saving doc!", error);
@@ -455,8 +440,6 @@ class Editor extends Component {
                     this.saveDocument();
                     this.setState({ userChanged: false }); // resetting var
                 }
-            } else {
-                console.log("=> Skipping autosave (user hasn't edited)...");
             }
         }, SAVE_INTERVAL);
     };
@@ -613,6 +596,10 @@ class Editor extends Component {
             alertContent,
             toastShow,
             username,
+            showComments,
+            comments,
+            toastContent,
+            quillRef,
         } = this.state;
 
         if (error) {
@@ -638,6 +625,8 @@ class Editor extends Component {
                     comment={(e) => this.handleComment(e)}
                 />
 
+                {showComments ? <Comments content={comments} quill={quillRef} /> : null}
+
                 <main className="editor">
                     <Container>
                         <ReactQuill
@@ -652,20 +641,11 @@ class Editor extends Component {
                         />
                     </Container>
 
-                    <ToastContainer position="top-end" className="p-3">
-                        <Toast
-                            onClose={() => this.setState({ toastShow: false })}
-                            show={toastShow}
-                            delay={4000}
-                            autohide
-                        >
-                            <Toast.Header>
-                                <strong className="me-auto">Notice</strong>
-                                <small className="text-muted">just now</small>
-                            </Toast.Header>
-                            <Toast.Body>The document was saved.</Toast.Body>
-                        </Toast>
-                    </ToastContainer>
+                    <Notification
+                        content={toastContent}
+                        toastShow={toastShow}
+                        toastClose={() => this.setState({ toastShow: false })}
+                    />
 
                     <Modal show={openModalShown} onHide={this.hideOpenModal}>
                         <Modal.Header closeButton>

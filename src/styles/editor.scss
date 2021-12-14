@@ -1,4 +1,3 @@
-
 .ck-editor__top {
     background-color: #f3f3f3;
 }
@@ -40,7 +39,30 @@
     z-index: 3 !important;
 }
 
-/* EDITOR MAIN*/ 
+.comments {
+    background-color: #222;
+    color: #f3f3f3;
+    border-radius: 5px;
+    z-index: 3 !important;
+    position: fixed;
+    right: 10%;
+    top: 25%;
+    padding: 1em;
+}
+
+.list-group-item {
+    padding: 0;
+    color: inherit;
+    background-color: inherit;
+    border: none;
+    margin: 5px;
+    button {
+        width: 100%;
+        height: 100%;
+    }
+}
+
+/* EDITOR MAIN*/
 
 .ck-editor__main,
 .ql-container.ql-snow {
@@ -66,7 +88,6 @@
     border: none !important;
     box-shadow: 0 0 5px 0 rgba(39, 83, 141, 0.5) !important;
 }
-
 
 /* PRINT STYLES */
 
@@ -94,6 +115,5 @@
         display: none !important;
     }
 }
-
 
 /* PRINT STYLES end*/
