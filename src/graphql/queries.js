@@ -26,17 +26,19 @@ const OPEN_DOCUMENT = gql`
         openDoc(docid: $docid) {
             _id
             data
+            comments
         }
     }
 `;
 
 const UPDATE_DOCUMENT = gql`
     # Updates document and returns the new document.
-    mutation UpdateDoc($docid: ID!, $data: String!) {
-        updateDoc(docid: $docid, data: $data) {
+    mutation UpdateDoc($docid: ID!, $data: String! $comments: [String]) {
+        updateDoc(docid: $docid, data: $data, comments: $comments) {
             _id
             users
             data
+            comments
         }
     }
 `;

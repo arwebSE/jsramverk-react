@@ -53,7 +53,7 @@ class Editor extends Component {
             refreshToken: null,
             allowedUsers: [],
             apollo: null,
-            comments: null,
+            comments: [],
             showComments: true,
             toastContent: "",
         };
@@ -148,14 +148,14 @@ class Editor extends Component {
 
     /* HELPER FUNCTIONS */
 
-    handleComment = (e) => {
+    handleComment = (e = null) => {
         if (e) e.preventDefault();
         if (this.quillRef == null || this.state.docid === undefined) {
             console.log("=> Comment: Couldn't make comment. quillref:", this.quillRef, "docid:", this.state.docid);
             return;
         }
         let prompt = window.prompt("Enter comment text:", "");
-        let metadata = [];
+        let comments = [];
         if (prompt == null || prompt === "") {
             console.log("=> Comment: Cancelled propmt.");
         } else {
@@ -168,22 +168,34 @@ class Editor extends Component {
                     let text = this.quillRef.getText(selection.index, selection.length);
                     console.log("=> Comment: Text selected:", text);
 
-                    metadata.push({ range: selection, comment: prompt });
+                    comments.push({ range: selection, comment: prompt });
                     this.quillRef.formatText(selection.index, selection.length, { background: "#fff72b" });
-                    if (this.state.comments === null) {
-                        console.log("meta1", metadata);
-                        this.setState({ comments: metadata });
-                    } else {
-                        console.log("meta2", metadata);
-                        let arr = this.state.comments;
-                        arr = arr.concat(metadata);
-                        this.setState({ comments: arr });
+
+                    // if not the first comment, add previous comments to new array
+                    if (this.state.comments !== null) {
+                        comments = comments.concat(this.state.comments);
                     }
+
+                    this.setState({ comments }); // save changes to state
+                    this.saveDocument();
                 }
             } else {
-                this.showAlert("Cursor was not in editor!");
+                this.showAlert("Cursor was not in editor!"); // shouldn't ever happen anymore
             }
         }
+    };
+
+    deleteComment = (index) => {
+        if (this.state.comments === []) {
+            console.log("=> Couldn't delete comment.");
+            return;
+        }
+        let comments = this.state.comments;
+        const selection = comments[index];
+        this.quillRef.formatText(selection.range.index, selection.range.length, { background: false }); // clear formatting
+        comments.splice(index, 1); // remove comment
+        this.setState({ comments }); // save changes to state
+        this.saveDocument();
     };
 
     handlePDF = async (e = null) => {
@@ -355,6 +367,7 @@ class Editor extends Component {
             .then((result) => {
                 const docid = result.data.openDoc._id;
                 let data = JSON.parse(result.data.openDoc.data);
+                let comments = result.data.openDoc.comments;
                 console.log("<= Response to openDoc query:", result);
                 if (data === null) {
                     data = "";
@@ -362,6 +375,17 @@ class Editor extends Component {
                 } else {
                     console.log("<= Received initial content:", data);
                 }
+
+                if (comments === null) {
+                    comments = [];
+                    console.log("<= No stored comments received.");
+                } else {
+                    comments = comments.map((comment) => (comment = JSON.parse(comment)));
+                    console.log("<= Received comments:", comments);
+                }
+
+                // load comments
+                this.setState({ comments });
 
                 this.setState({ docid, userChanged: false }); // important to ignore changes fetched
                 this.quillRef.setContents(data, "api");
@@ -414,13 +438,14 @@ class Editor extends Component {
         }
 
         const data = JSON.stringify(this.quillRef.getContents());
+        const comments = this.state.comments.map((comment) => (comment = JSON.stringify(comment)));
         this.state.apollo
             .mutate({
                 mutation: queries.UPDATE_DOCUMENT,
-                variables: { docid: this.state.docid, data },
+                variables: { docid: this.state.docid, data, comments },
             })
             .then((result) => {
-                console.log("=> Saved! data:", this.quillRef.getContents());
+                console.log("=> Saved! data:", this.quillRef.getContents(), "comments:", this.state.comments);
                 this.setState({ toastShow: true, toastContent: "The document was saved." });
             })
             .catch((error) => {
@@ -599,7 +624,6 @@ class Editor extends Component {
             showComments,
             comments,
             toastContent,
-            quillRef,
         } = this.state;
 
         if (error) {
@@ -625,14 +649,14 @@ class Editor extends Component {
                     comment={(e) => this.handleComment(e)}
                 />
 
-                {showComments ? <Comments content={comments} quill={quillRef} /> : null}
+                {showComments ? (
+                    <Comments content={comments} quill={this.quillRef} deleteComment={this.deleteComment} />
+                ) : null}
 
                 <main className="editor">
                     <Container>
                         <ReactQuill
-                            ref={(el) => {
-                                this.reactQuillRef = el;
-                            }}
+                            ref={(el) => (this.reactQuillRef = el)}
                             theme={"snow"}
                             modules={this.modules}
                             formats={this.formats}

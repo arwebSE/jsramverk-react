@@ -56,9 +56,14 @@
     background-color: inherit;
     border: none;
     margin: 5px;
-    button {
+    button.commentLink {
         width: 100%;
         height: 100%;
+    }
+    button.closeComment {
+        margin: 2px;
+        padding: 2px;
+        line-height: 10px;
     }
 }
 
