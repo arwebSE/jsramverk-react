@@ -1,11 +1,11 @@
-import React from 'react'
-import { Col, Container, Row, Form, Button, Alert } from 'react-bootstrap';
-import '../styles/login.scss';
-import loginImg from '../img/login.svg';
-import Header from '../layout/Header';
-import Footer from '../layout/Footer';
-import { Formik } from 'formik';
-import * as yup from 'yup';
+import React from "react";
+import { Col, Container, Row, Form, Button, Alert } from "react-bootstrap";
+import "../styles/login.scss";
+import loginImg from "../img/login.svg";
+import Header from "../layout/Header";
+import Footer from "../layout/Footer";
+import { Formik } from "formik";
+import * as yup from "yup";
 
 let apiUrl;
 if (process.env.NODE_ENV === "development") {
@@ -21,27 +21,26 @@ export default class Login extends React.Component {
         super(props);
         this.state = {
             alertShown: false,
-            alertContent: null
+            alertContent: null,
         };
     }
 
     schema = yup.object().shape({
-        username: yup.string().required('Username is required'),
-        password: yup.string().required('Password is required')
+        username: yup.string().required("Username is required"),
+        password: yup.string().required("Password is required"),
     });
-
 
     submit(values) {
         console.log("Submitted values:", values);
         const requestOptions = {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ username: values.username, password: values.password })
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ username: values.username, password: values.password }),
         };
         fetch(`${apiUrl}/login`, requestOptions)
-            .then(async response => {
-                const isJson = response.headers.get('content-type')?.includes('application/json');
-                const data = isJson && await response.json();
+            .then(async (response) => {
+                const isJson = response.headers.get("content-type")?.includes("application/json");
+                const data = isJson && (await response.json());
 
                 // check for error response
                 if (!response.ok) {
@@ -52,17 +51,25 @@ export default class Login extends React.Component {
                 }
                 console.log("<= Received tokens!");
                 this.props.history.push({
-                    pathname: '/docs',
-                    state: { username: values.username, accessToken: data.accessToken, refreshToken: data.refreshToken }
-                })
+                    pathname: "/docs",
+                    state: {
+                        username: values.username,
+                        accessToken: data.accessToken,
+                        refreshToken: data.refreshToken,
+                    },
+                });
             })
-            .catch(error => {
-                console.error('Error logging in!', error);
+            .catch((error) => {
+                console.error("Error logging in!", error);
             });
     }
 
-    showAlert = (content) => { this.setState({ alertShown: true, alertContent: content }) }
-    hideAlert = () => { this.setState({ alertShown: false, alertContent: null }) }
+    showAlert = (content) => {
+        this.setState({ alertShown: true, alertContent: content });
+    };
+    hideAlert = () => {
+        this.setState({ alertShown: false, alertContent: null });
+    };
 
     render() {
         return (
@@ -72,7 +79,6 @@ export default class Login extends React.Component {
                 <Alert variant="danger" show={this.state.alertShown} onClose={this.hideAlert} dismissible>
                     {this.state.alertContent}
                 </Alert>
-
 
                 <main className="login">
                     <Container className="mt-5">
@@ -86,8 +92,8 @@ export default class Login extends React.Component {
                                 <Formik
                                     validationSchema={this.schema}
                                     onSubmit={(values) => this.submit(values)}
-                                    onChange={e => this.handleChange(e)}
-                                    initialValues={{ username: '', password: '' }}
+                                    onChange={(e) => this.handleChange(e)}
+                                    initialValues={{ username: "", password: "" }}
                                 >
                                     {({ handleSubmit, handleChange, values, touched, errors }) => (
                                         <Form noValidate onSubmit={handleSubmit}>
@@ -95,13 +101,19 @@ export default class Login extends React.Component {
 
                                             <Form.Group className="mb-3 relative" controlId="registerUsername">
                                                 <Form.Label>Username</Form.Label>
-                                                <Form.Control required type="text" placeholder="Enter your username" name="username"
+                                                <Form.Control
+                                                    required
+                                                    type="text"
+                                                    placeholder="Enter your username"
+                                                    name="username"
                                                     onChange={handleChange}
                                                     value={values.username}
                                                     isInvalid={!!errors.username}
                                                     isValid={touched.username && !errors.username}
                                                 />
-                                                <Form.Control.Feedback tooltip type="valid">Looks good!</Form.Control.Feedback>
+                                                <Form.Control.Feedback tooltip type="valid">
+                                                    Looks good!
+                                                </Form.Control.Feedback>
                                                 <Form.Control.Feedback tooltip type="invalid">
                                                     {errors.username}
                                                 </Form.Control.Feedback>
@@ -109,27 +121,39 @@ export default class Login extends React.Component {
 
                                             <Form.Group className="mb-3 relative" controlId="registerPassword">
                                                 <Form.Label>Password</Form.Label>
-                                                <Form.Control required type="password" placeholder="Enter your password" name="password"
+                                                <Form.Control
+                                                    required
+                                                    type="password"
+                                                    placeholder="Enter your password"
+                                                    name="password"
                                                     onChange={handleChange}
                                                     value={values.password}
                                                     isInvalid={!!errors.password}
                                                     isValid={touched.password && !errors.password}
                                                 />
-                                                <Form.Control.Feedback tooltip type="valid">Looks good!</Form.Control.Feedback>
+                                                <Form.Control.Feedback tooltip type="valid">
+                                                    Looks good!
+                                                </Form.Control.Feedback>
                                                 <Form.Control.Feedback tooltip type="invalid">
                                                     {errors.password}
                                                 </Form.Control.Feedback>
                                             </Form.Group>
 
                                             <div className="d-grid gap-2">
-                                                <Button variant="primary" type="submit" size="lg">Login</Button>
+                                                <Button variant="primary" type="submit" size="lg">
+                                                    Login
+                                                </Button>
                                             </div>
 
                                             <div className="mt-2 text-center">
-                                                <a href="#register" className="reset"><small>Don't have an account?</small></a>
+                                                <a href="#register" className="reset">
+                                                    <small>Don't have an account?</small>
+                                                </a>
                                                 <div></div>
                                                 {/* eslint-disable jsx-a11y/anchor-is-valid */}
-                                                <a href="#" className="reset"><small>Forgotten password?</small></a>
+                                                <a href="#" className="reset">
+                                                    <small>Forgotten password?</small>
+                                                </a>
                                             </div>
                                         </Form>
                                     )}
@@ -145,6 +169,6 @@ export default class Login extends React.Component {
 
                 <Footer />
             </>
-        )
+        );
     }
 }

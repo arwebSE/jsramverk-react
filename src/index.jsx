@@ -3,12 +3,13 @@ import ReactDOM from "react-dom";
 
 import "../node_modules/bootstrap/dist/css/bootstrap.min.css";
 import "./styles/main.scss";
-import Editor from "./routes/Editor.jsx";
-import Home from "./routes/Home.jsx";
-import Login from "./routes/Login.jsx";
-import Logout from "./routes/Logout.jsx";
-import Register from "./routes/Register.jsx";
-import Success from "./routes/Success.jsx";
+import Editor from "./routes/Editor";
+import Start from "./routes/Start";
+import Login from "./routes/Login";
+import Logout from "./routes/Logout";
+import Register from "./routes/Register";
+import Success from "./routes/Success";
+import Home from "./routes/Home";
 
 import { HashRouter as Router, Switch, Route } from "react-router-dom";
 
@@ -16,7 +17,7 @@ ReactDOM.render(
     <Router hashType="noslash">
         <Switch>
             <Route path="/" exact component={Home} />
-            <Route path="/home" exact component={Home} />
+            <Route path="/start" exact component={Start} />
             <Route path="/login" exact component={Login} />
             <Route path="/logout" exact component={Logout} />
             <Route path="/register" exact component={Register} />
