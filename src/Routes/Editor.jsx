@@ -157,7 +157,7 @@ class Editor extends Component {
         let prompt = window.prompt("Enter comment text:", "");
         let comments = [];
         if (prompt == null || prompt === "") {
-            console.log("=> Comment: Cancelled propmt.");
+            console.log("=> Comment: Cancelled prompt.");
         } else {
             let selection = this.quillRef.getSelection(true); // focus = true
             if (selection) {
@@ -169,11 +169,12 @@ class Editor extends Component {
                     console.log("=> Comment: Text selected:", text);
 
                     comments.push({ range: selection, comment: prompt });
+
                     this.quillRef.formatText(selection.index, selection.length, { background: "#fff72b" });
 
                     // if not the first comment, add previous comments to new array
                     if (this.state.comments !== null) {
-                        comments = comments.concat(this.state.comments);
+                        comments = this.state.comments.concat(comments);
                     }
 
                     this.setState({ comments }); // save changes to state
@@ -390,6 +391,8 @@ class Editor extends Component {
                 this.setState({ docid, userChanged: false }); // important to ignore changes fetched
                 this.quillRef.setContents(data, "api");
                 this.quillRef.enable();
+
+                this.setState({ editData: this.quillRef.root.innerHTML }); // for print to work without changes made
 
                 this.socket.emit("get-document", docid);
                 this.receiveChanges();
