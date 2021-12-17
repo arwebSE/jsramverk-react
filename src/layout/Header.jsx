@@ -46,7 +46,7 @@ export default function Header(props) {
                     </Navbar.Collapse>
 
                     <Navbar.Collapse className="justify-content-end">
-                        {props.editor && (
+                        {props.showUser && (
                             <NavDropdown title={`Signed in as: ${props.username}`}>
                                 <NavDropdown.Item onClick={props.logout}>Logout</NavDropdown.Item>
                             </NavDropdown>

@@ -16,8 +16,8 @@ import { HashRouter as Router, Switch, Route } from "react-router-dom";
 ReactDOM.render(
     <Router hashType="noslash">
         <Switch>
-            <Route path="/" exact component={Home} />
-            <Route path="/start" exact component={Start} />
+            <Route path="/" exact component={Start} />
+            <Route path="/home" exact component={Home} />
             <Route path="/login" exact component={Login} />
             <Route path="/logout" exact component={Logout} />
             <Route path="/register" exact component={Register} />

@@ -51,7 +51,7 @@ export default class Login extends React.Component {
                 }
                 console.log("<= Received tokens!");
                 this.props.history.push({
-                    pathname: "/docs",
+                    pathname: "/#home",
                     state: {
                         username: values.username,
                         accessToken: data.accessToken,
