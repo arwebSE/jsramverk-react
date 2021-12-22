@@ -6,13 +6,13 @@ import "react-quill/dist/quill.snow.css";
 import "../styles/editor.scss";
 import { Modal, Button, Table, InputGroup, FormControl, Container, Alert, Dropdown } from "react-bootstrap";
 import socketIOClient from "socket.io-client";
-import { ApolloClient, InMemoryCache, createHttpLink } from "@apollo/client";
-import { setContext } from "@apollo/client/link/context";
 import * as queries from "../graphql/queries";
 import { saveAs } from "file-saver";
 import { pdfExporter } from "quill-to-pdf";
 import Comments from "../components/Comments";
 import Notification from "../components/Notification";
+import * as auth from "../utils/auth.js";
+import * as db from "../utils/db.js";
 
 require("dotenv").config();
 
@@ -95,16 +95,16 @@ class Editor extends Component {
 
     /* COMPONENT LIFECYCLE */
 
-    async componentDidMount() {
+    componentDidMount = async () => {
         // Handle username with storage
         if (await this.isLoggedIn()) {
             // Setup auto refresh access token
             this.autoRefreshToken();
 
-            console.log("=> Connecting to API at:", apiUrl);
-
             // init gql client
-            this.initApolloClient();
+            await this.initApolloClient();
+
+            console.log("=> Connecting to API at:", apiUrl);
 
             // Attaching Quill
             this.attachQuillRefs();
@@ -123,7 +123,7 @@ class Editor extends Component {
             console.log("Aborting load.");
             this.props.history.push({ pathname: "/login" });
         }
-    }
+    };
 
     componentWillUnmount() {
         if (this.socket !== null) {
@@ -147,6 +147,11 @@ class Editor extends Component {
     }
 
     /* HELPER FUNCTIONS */
+
+    initApolloClient = async () => {
+        let apollo = await db.initApollo(this.state.accessToken);
+        this.setState({ apollo }); // Store apollo ref in state var
+    };
 
     handleComment = (e = null) => {
         if (e) e.preventDefault();
@@ -210,26 +215,6 @@ class Editor extends Component {
         saveAs(pdfAsBlob, "pdf-export.pdf"); // downloads from the browser
     };
 
-    initApolloClient = () => {
-        const httpLink = createHttpLink({ uri: `${apiUrl}/graphql` });
-        const authLink = setContext((_, { headers }) => {
-            const token = this.state.accessToken;
-            return {
-                headers: {
-                    ...headers,
-                    "Content-Type": "application/json",
-                    authorization: token ? `Bearer ${token}` : "",
-                },
-            };
-        });
-
-        const apollo = new ApolloClient({
-            link: authLink.concat(httpLink),
-            cache: new InMemoryCache(),
-        });
-        this.setState({ apollo }); // Store apollo ref in state var
-    };
-
     handleUsersInput = (values) => {
         let arr = values.split(",").map(function (item) {
             return item.trim();
@@ -239,33 +224,13 @@ class Editor extends Component {
 
     isLoggedIn = async () => {
         console.log("=> Stored username:", localStorage.getItem("username"));
-        if (localStorage.getItem("username") === null) {
-            console.log("Looking for loc props...", this.props.location.state);
-            if (this.props.location.state !== undefined) {
-                this.setState({
-                    username: this.props.location.state.username,
-                    accessToken: this.props.location.state.accessToken,
-                    refreshToken: this.props.location.state.refreshToken,
-                });
-                localStorage.setItem("username", this.props.location.state.username);
-                localStorage.setItem("accessToken", this.props.location.state.accessToken); // UNSECURE
-                localStorage.setItem("refreshToken", this.props.location.state.refreshToken); // UNSECURE
-                console.log(
-                    "Got loc props! Set username to:",
-                    this.props.location.state.username,
-                    "and saved tokens to LS. (unsecure)"
-                );
-                return true;
-            } else {
-                console.log("Couldn't get loc props and not logged in. Back to login...", this.state.username);
-                this.props.history.push({ pathname: "/login" });
-            }
-        } else {
-            // UNSECURE
+        let loginData = auth.getLogin();
+        if (loginData) {
+            console.log("Logged in as:", loginData.username);
             this.setState({
-                username: localStorage.getItem("username"),
-                accessToken: localStorage.getItem("accessToken"),
-                refreshToken: localStorage.getItem("refreshToken"),
+                username: loginData.username,
+                accessToken: loginData.accessToken,
+                refreshToken: loginData.refreshToken,
             });
             return true;
         }
@@ -307,24 +272,27 @@ class Editor extends Component {
     };
 
     listDocuments = async () => {
-        console.log("=> Requesting to list docs for user:", this.state.username);
+        console.log("=> Calling listUserDocs...");
+        let userdocs = await db.listUserDocs(this.state.apollo, this.state.username);
+        console.log("userdocs", userdocs);
+        if (userdocs) {
+            this.setState({ documents: userdocs, apiLoaded: true });
+            this.firstFetch(userdocs); // callback
+        } else {
+            console.log("=> Trying to refresh token...");
 
-        this.state.apollo
-            .query({
-                query: queries.LIST_USER_DOCUMENTS,
-                variables: { user: this.state.username },
-            })
-            .then((result) => {
-                const docs = result.data.documents;
-                this.setState({ documents: docs, apiLoaded: true });
-                console.log("<= Recieved docs list:", docs);
-                this.firstFetch(docs); // callback
-            })
-            .catch((error) => {
-                console.error("Error getting docs!", error, "Trying to refresh token...");
-                this.refreshAccessToken(true);
-                this.firstFetch(false); // callback. tell list firstfetch it failed
-            });
+            if (await auth.refreshAccessToken()) {
+                userdocs = await db.listUserDocs(this.state.apollo, this.state.username);
+                console.log("userdocs", userdocs);
+                if (userdocs) {
+                    this.setState({ documents: userdocs, apiLoaded: true });
+                    this.firstFetch(userdocs); // callback
+                    return true;
+                }
+                return;
+            }
+            return;
+        }
     };
 
     attachQuillRefs = () => {
@@ -405,32 +373,20 @@ class Editor extends Component {
             });
     };
 
-    createDocument = (name, e = null) => {
+    createDocument = async (name, e = null) => {
         if (e) e.preventDefault();
         if (this.state.username == null) return;
-
         // Add any additional users if given
         let users = [this.state.username];
         if (this.state.allowedUsers.length > 0) {
             users = users.concat(this.state.allowedUsers);
         }
 
-        console.log("=> sending request to create doc with name:", name, "users:", users);
-
-        this.state.apollo
-            .mutate({
-                mutation: queries.CREATE_DOCUMENT,
-                variables: { name, users },
-            })
-            .then((result) => {
-                const data = result.data.createDoc;
-                console.log("<= Received created document with name:", data.name, "id:", data._id);
-                console.log("<= Opening it...");
-                this.openDocument(data._id);
-            })
-            .catch((error) => {
-                console.error("Error creating doc!", error);
-            });
+        let results = await db.createDocument(this.state.apollo, name, users);
+        if (results) {
+            this.openDocument(results);
+        }
+        this.hideNewModal();
     };
 
     saveDocument = (e = null) => {
@@ -483,78 +439,8 @@ class Editor extends Component {
         if (this.state.refreshToken == null) return;
 
         this.interval = setInterval(async () => {
-            await this.refreshAccessToken();
+            await auth.refreshAccessToken();
         }, TOKEN_INTERVAL);
-    };
-
-    refreshAccessToken = async (listAfter) => {
-        if (this.state.refreshToken !== null || localStorage.getItem("refreshToken") !== null) {
-            console.log("=> Requesting to refresh accessToken...");
-            const requestOptions = {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ token: this.state.refreshToken }),
-            };
-            fetch(`${apiUrl}/token`, requestOptions)
-                .then(async (response) => {
-                    const isJson = response.headers.get("content-type")?.includes("application/json");
-                    const data = isJson && (await response.json());
-
-                    if (!response.ok) {
-                        const error = (data && data.message) || response.status;
-                        console.log("Error refreshing token", data);
-                        return Promise.reject(error);
-                    }
-                    console.log("<= Successfully refreshed AccessToken!");
-                    this.setState({ accessToken: data.accessToken });
-                    localStorage.setItem("accessToken", data.accessToken);
-                    if (listAfter) {
-                        this.listDocuments();
-                    }
-                })
-                .catch((error) => {
-                    console.error("Error refreshing atoken!", error);
-                });
-        } else {
-            console.log("RefreshToken is null!! this shudnt happen");
-        }
-    };
-
-    handleLogout = (e = null) => {
-        if (e) e.preventDefault();
-        console.log("Logging out! Deleting LocalStorage...");
-        localStorage.clear();
-        if (this.state.refreshToken !== null) {
-            console.log("Requesting to remove rftoken:", this.state.refreshToken);
-            const requestOptions = {
-                method: "DELETE",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ username: this.state.username, token: this.state.refreshToken }),
-            };
-            fetch(`${apiUrl}/logout`, requestOptions)
-                .then(async (response) => {
-                    const isJson = response.headers.get("content-type")?.includes("application/json");
-                    const data = isJson && (await response.json());
-
-                    if (!response.ok) {
-                        const error = (data && data.message) || response.status;
-                        this.showAlert(data);
-                        return Promise.reject(error);
-                    }
-                    console.log("Successfully removed rftoken!");
-                    this.props.history.push({
-                        pathname: "/logout",
-                    });
-                })
-                .catch((error) => {
-                    console.error("Error logging out!", error);
-                });
-        } else {
-            console.log("RefreshToken not set. Skipping DELETE request.");
-            this.props.history.push({
-                pathname: "/logout",
-            });
-        }
     };
 
     /* MISC FUNCTIONS */
@@ -640,6 +526,7 @@ class Editor extends Component {
                 </Alert>
 
                 <Header
+                    showUser={true}
                     editor={true}
                     new={this.showNewModal}
                     open={this.showOpenModal}
@@ -647,7 +534,7 @@ class Editor extends Component {
                     print={(e) => this.printEditData(e)}
                     reset={this.resetDB}
                     username={username}
-                    logout={this.handleLogout}
+                    logout={auth.logout}
                     pdf={(e) => this.handlePDF(e)}
                     comment={(e) => this.handleComment(e)}
                 />

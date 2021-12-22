@@ -6,6 +6,7 @@ const LIST_USER_DOCUMENTS = gql`
         documents(user: $user) {
             _id
             name
+            users
         }
     }
 `;
@@ -52,4 +53,11 @@ const RESET_DB = gql`
     }
 `;
 
-export { LIST_USER_DOCUMENTS, CREATE_DOCUMENT, OPEN_DOCUMENT, UPDATE_DOCUMENT, RESET_DB };
+const DELETE_DOCUMENT = gql`
+    # DELETES a document and returns true if deleted or not found, and false if error.
+    mutation DeleteDoc($docid: ID!) {
+        deleteDoc(docid: $docid)
+    }
+`;
+
+export { LIST_USER_DOCUMENTS, CREATE_DOCUMENT, OPEN_DOCUMENT, UPDATE_DOCUMENT, RESET_DB, DELETE_DOCUMENT };

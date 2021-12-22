@@ -49,15 +49,11 @@ export default class Login extends React.Component {
                     this.showAlert(data);
                     return Promise.reject(error);
                 }
-                console.log("<= Received tokens!");
-                this.props.history.push({
-                    pathname: "/#home",
-                    state: {
-                        username: values.username,
-                        accessToken: data.accessToken,
-                        refreshToken: data.refreshToken,
-                    },
-                });
+                console.log("<= Received tokens! Setting localStorage & redirecting...");
+                localStorage.setItem("username", values.username);
+                localStorage.setItem("accessToken", data.accessToken);
+                localStorage.setItem("refreshToken", data.refreshToken);
+                this.props.history.push({ pathname: "/#home" });
             })
             .catch((error) => {
                 console.error("Error logging in!", error);

@@ -24,7 +24,7 @@ export default function Logout() {
                             </div>
                         </Col>
                         <Col lg={8} md={6} sm={12}>
-                            <img className="w-100" src={logoutImg} alt="background art" />
+                            <img className="w-75" src={logoutImg} alt="background art" />
                         </Col>
                     </Row>
                 </Container>

@@ -8,14 +8,14 @@ export default function Header(props) {
         <header className="header">
             <Navbar bg="dark" variant="dark" className="toolbar">
                 <Container>
-                    <Navbar.Brand href="#" className="justify-content-center">
+                    <Navbar.Brand href="/#home" className="justify-content-center">
                         <img
                             src="logo.png"
                             width="30"
                             height="30"
                             className="d-inline-block align-top"
                             alt="AuroDocs logo"
-                        />{" "}
+                        />
                         AuroDocs™
                     </Navbar.Brand>
                     <Navbar.Toggle aria-controls="basic-navbar-nav" />
