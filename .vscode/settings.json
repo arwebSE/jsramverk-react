@@ -7,16 +7,7 @@
             "splitTerminals": [
                 {
                     "name": "React Dev",
-                    "commands": [
-                        "yarn start"
-                    ]
-                },
-                {
-                    "name": "API Backend",
-                    "commands": [
-                        "cd ../api",
-                        "yarn watch"
-                    ]
+                    "commands": ["yarn start"]
                 }
             ]
         }

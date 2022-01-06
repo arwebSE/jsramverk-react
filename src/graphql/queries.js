@@ -7,14 +7,15 @@ const LIST_USER_DOCUMENTS = gql`
             _id
             name
             users
+            type
         }
     }
 `;
 
 const CREATE_DOCUMENT = gql`
     # Creates new document and returns the id and name.
-    mutation CreateDoc($name: String!, $users: [String]) {
-        createDoc(name: $name, users: $users) {
+    mutation CreateDoc($name: String!, $users: [String], $type: String) {
+        createDoc(name: $name, users: $users, type: $type) {
             _id
             name
         }
@@ -28,18 +29,20 @@ const OPEN_DOCUMENT = gql`
             _id
             data
             comments
+            type
         }
     }
 `;
 
 const UPDATE_DOCUMENT = gql`
     # Updates document and returns the new document.
-    mutation UpdateDoc($docid: ID!, $data: String! $comments: [String]) {
-        updateDoc(docid: $docid, data: $data, comments: $comments) {
+    mutation UpdateDoc($docid: ID!, $data: String! $comments: [String], $type: String) {
+        updateDoc(docid: $docid, data: $data, comments: $comments, type: $type) {
             _id
             users
             data
             comments
+            type
         }
     }
 `;

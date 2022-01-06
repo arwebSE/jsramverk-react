@@ -17,14 +17,14 @@ import Footer from "../layout/Footer";
 import "../styles/home.scss";
 import * as auth from "../utils/auth.js";
 import * as db from "../utils/db.js";
+import Modals from "../components/Modals";
 
 let apiUrl;
 if (process.env.NODE_ENV === "development") {
     console.log("=> Dev Mode!");
     apiUrl = "http://localhost:1337";
 } else {
-    apiUrl = "https://jsramverk-editor-auro17.azurewebsites.net";
-    //apiUrl = "https://jsramverk-api.arwebse.repl.co";
+    apiUrl = process.env.API_URL;
 }
 
 export default class Home extends Component {
@@ -45,6 +45,7 @@ export default class Home extends Component {
             allowedUsers: [],
             newDocName: null,
             deleteModalShown: false,
+            newDocType: "text",
         };
     }
 
@@ -139,6 +140,10 @@ export default class Home extends Component {
         }
     };
 
+    sleep = (milliseconds) => {
+        return new Promise((resolve) => setTimeout(resolve, milliseconds));
+    };
+
     handleUsersInput = (values) => {
         let arr = values.split(",").map(function (item) {
             return item.trim();
@@ -146,22 +151,28 @@ export default class Home extends Component {
         this.setState({ allowedUsers: arr });
     };
 
-    sleep = (milliseconds) => {
-        return new Promise((resolve) => setTimeout(resolve, milliseconds));
+    handleNewDocRadio = (value) => {
+        console.log("Set newDocType:", value);
+        this.setState({ newDocType: value });
     };
 
-    createDocument = async (e = null) => {
-        if (e) e.preventDefault();
+    handleNewDocName = (value) => {
+        console.log("Set newDocName:", value);
+        this.setState({ newDocName: value });
+    };
+
+    createDocument = async () => {
         if (this.state.username == null) return;
+        if (this.state.newDocName == null) return;
 
         let users = [this.state.username];
         if (this.state.allowedUsers.length > 0) {
             users = users.concat(this.state.allowedUsers);
         }
 
-        let results = await db.createDocument(this.state.apollo, this.state.newDocName, users);
+        let results = await db.createDocument(this.state.apollo, this.state.newDocName, users, this.state.newDocType);
         if (results) {
-            this.showAlert("Successfully created doc!");
+            this.showAlert("Successfully created doc! Please wait 5 seconds to refresh...");
             console.log("Successfully created doc with ID:", results);
             this.sleep(5000).then((result) => {
                 window.location.reload(false);
@@ -191,12 +202,15 @@ export default class Home extends Component {
         const cardRows = rows.map((_row, index) =>
             this.state.documents.slice(index * rowWidth, index * rowWidth + rowWidth)
         );
-        const content = cardRows.map((row, index) => (
+        const documents = cardRows.map((row, index) => (
             <div className="row" key={index}>
                 {row.map((document) => (
                     <Card border="primary" key={document._id} style={{ width: "19rem" }}>
                         <Card.Body>
-                            <Card.Subtitle className="mb-2 text-center text-muted">Document</Card.Subtitle>
+                            <Card.Subtitle className="mb-2 text-center text-muted">
+                                {document.type === "code" && "Code Document"}
+                                {document.type !== "code" && "Text Document"}
+                            </Card.Subtitle>
                             <Card.Title>{document.name}</Card.Title>
                             <Card.Text className="text-muted">
                                 Editors:
@@ -252,7 +266,7 @@ export default class Home extends Component {
                                 {this.state.apiLoaded && (
                                     <>
                                         <h1>Documents</h1>
-                                        {content}
+                                        {documents}
                                         <div className="row">
                                             <Card bg="primary" text="white" style={{ width: "18rem" }}>
                                                 <Card.Body>
@@ -333,44 +347,15 @@ export default class Home extends Component {
                             </Button>
                         </Modal.Footer>
                     </Modal>
-
-                    <Modal show={this.state.newModalShown} onHide={this.hideNewModal}>
-                        <Modal.Header closeButton>
-                            <Modal.Title>Create New Document</Modal.Title>
-                        </Modal.Header>
-                        <Modal.Body>
-                            <InputGroup size="lg">
-                                <InputGroup.Text id="inputGroup-sizing-lg">Name</InputGroup.Text>
-                                <FormControl
-                                    aria-label="Large"
-                                    aria-describedby="inputGroup-sizing-sm"
-                                    onChange={(e) => this.setState({ newDocName: e.target.value })}
-                                />
-                            </InputGroup>
-                            <Dropdown.Divider />
-                            <InputGroup>
-                                <InputGroup.Text>Other users (comma separated)</InputGroup.Text>
-                                <FormControl
-                                    as="textarea"
-                                    aria-label="Other users (comma separated)"
-                                    onChange={(e) => this.handleUsersInput(e.target.value)}
-                                />
-                            </InputGroup>
-                        </Modal.Body>
-                        <Modal.Footer>
-                            <Button
-                                variant="primary"
-                                onClick={(e) => {
-                                    this.createDocument(e);
-                                }}
-                            >
-                                Save
-                            </Button>
-                            <Button variant="secondary" onClick={this.hideNewModal}>
-                                Close
-                            </Button>
-                        </Modal.Footer>
-                    </Modal>
+                    <Modals
+                        modal="new"
+                        show={this.state.newModalShown}
+                        createDocument={this.createDocument}
+                        handleUsers={this.handleUsersInput}
+                        handleRadio={this.handleNewDocRadio}
+                        handleName={this.handleNewDocName}
+                        radioValue={this.state.newDocType}
+                    />
                 </main>
 
                 <Footer />

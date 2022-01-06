@@ -4,13 +4,25 @@ import Header from "../layout/Header";
 import Footer from "../layout/Footer";
 import "react-quill/dist/quill.snow.css";
 import "../styles/editor.scss";
-import { Modal, Button, Table, InputGroup, FormControl, Container, Alert, Dropdown } from "react-bootstrap";
+import {
+    Modal,
+    Button,
+    Table,
+    InputGroup,
+    FormControl,
+    Container,
+    Alert,
+    Dropdown,
+    ButtonGroup,
+    ToggleButton,
+} from "react-bootstrap";
 import socketIOClient from "socket.io-client";
 import * as queries from "../graphql/queries";
 import { saveAs } from "file-saver";
 import { pdfExporter } from "quill-to-pdf";
 import Comments from "../components/Comments";
 import Notification from "../components/Notification";
+import CodeEditor from "../components/CodeEditor";
 import * as auth from "../utils/auth.js";
 import * as db from "../utils/db.js";
 
@@ -21,8 +33,7 @@ if (process.env.NODE_ENV === "development") {
     console.log("=> Dev Mode!");
     apiUrl = "http://localhost:1337";
 } else {
-    apiUrl = "https://jsramverk-editor-auro17.azurewebsites.net";
-    //apiUrl = "https://jsramverk-api.arwebse.repl.co";
+    apiUrl = process.env.API_URL;
 }
 const SAVE_INTERVAL = 10000;
 const TOKEN_INTERVAL = 250000; // 300k = 5min
@@ -41,7 +52,7 @@ class Editor extends Component {
             documents: [],
             openModalShown: false,
             newModalShown: false,
-            editData: null,
+            editData: "",
             newDocName: null,
             alertShown: false,
             docid: props.match.params.id,
@@ -54,8 +65,10 @@ class Editor extends Component {
             allowedUsers: [],
             apollo: null,
             comments: [],
-            showComments: true,
+            showComments: false,
             toastContent: "",
+            codeMode: false,
+            newDocType: "text",
         };
     }
 
@@ -93,6 +106,11 @@ class Editor extends Component {
         "image",
     ];
 
+    docTypes = [
+        { name: "Text", value: "text" },
+        { name: "Code", value: "code" },
+    ];
+
     /* COMPONENT LIFECYCLE */
 
     componentDidMount = async () => {
@@ -107,10 +125,10 @@ class Editor extends Component {
             console.log("=> Connecting to API at:", apiUrl);
 
             // Attaching Quill
-            this.attachQuillRefs();
-
-            //this.quillRef.disable();
-            this.quillRef.setText("Loading...");
+            if (!this.state.codeMode) {
+                this.attachQuillRefs();
+                this.quillRef.setText("Loading...");
+            }
 
             // Attaching socket
             const sock = socketIOClient(apiUrl);
@@ -143,7 +161,9 @@ class Editor extends Component {
     }
 
     componentDidUpdate() {
-        this.attachQuillRefs();
+        if (!this.state.codeMode) {
+            this.attachQuillRefs();
+        }
     }
 
     /* HELPER FUNCTIONS */
@@ -153,7 +173,7 @@ class Editor extends Component {
         this.setState({ apollo }); // Store apollo ref in state var
     };
 
-    handleComment = (e = null) => {
+    handleAddComment = (e = null) => {
         if (e) e.preventDefault();
         if (this.quillRef == null || this.state.docid === undefined) {
             console.log("=> Comment: Couldn't make comment. quillref:", this.quillRef, "docid:", this.state.docid);
@@ -183,6 +203,7 @@ class Editor extends Component {
                     }
 
                     this.setState({ comments }); // save changes to state
+                    this.setState({ showComments: true });
                     this.saveDocument();
                 }
             } else {
@@ -314,66 +335,52 @@ class Editor extends Component {
         this.setState({ userChanged: false });
     }
 
-    openDocument = (docid, e = null) => {
+    openDocument = async (docid, e = null) => {
         if (e) e.preventDefault();
-        if (this.socket == null || this.quillRef == null) {
-            console.log("=> socket:", this.socket, "quillref:", this.quillRef);
+        if (this.socket == null || (this.quillRef == null && !this.state.codeMode)) {
+            console.log("=> warning! aborded load. socket:", this.socket, "and codemode:", this.state.codemode);
             return;
         }
         if (docid !== this.props.match.params.id) {
             // if on wrong url
-            console.log("=> redirecting to correct url");
+            console.log("=> Redirecting to correct url");
             this.props.history.push(`/docs/${docid}`);
         }
-
         console.log("=> Calling API to send doc:", docid);
 
-        this.state.apollo
-            .query({
-                query: queries.OPEN_DOCUMENT,
-                variables: { docid },
-            })
-            .then((result) => {
-                const docid = result.data.openDoc._id;
-                let data = JSON.parse(result.data.openDoc.data);
-                let comments = result.data.openDoc.comments;
-                console.log("<= Response to openDoc query:", result);
-                if (data === null) {
-                    data = "";
-                    console.log("<= Fetched document is empty.");
-                } else {
-                    console.log("<= Received initial content:", data);
-                }
+        const results = await db.openDocument(this.state.apollo, docid);
+        if (!results) {
+            console.log("Error opening doc. Aborting.");
+        } else if (results === "refresh") {
+            console.log("Couldn't open doc. Trying to refresh...");
+            auth.refreshAccessToken();
+        } else {
+            if (results.comments.length > 0) {
+                this.setState({ showComments: true, comments: results.comments }); // load comments
+            }
 
-                if (comments === null) {
-                    comments = [];
-                    console.log("<= No stored comments received.");
-                } else {
-                    comments = comments.map((comment) => (comment = JSON.parse(comment)));
-                    console.log("<= Received comments:", comments);
-                }
+            this.setState({ docid, userChanged: false }); // important to ignore changes fetched
 
-                // load comments
-                this.setState({ comments });
-
-                this.setState({ docid, userChanged: false }); // important to ignore changes fetched
-                this.quillRef.setContents(data, "api");
+            if (results.type === "code") {
+                console.log("<= Received doc IS a CODE document!");
+                // do something special
+                this.setState({ codeMode: true });
+                this.setState({ editData: results.data });
+                this.hideAlert();
+            } else {
+                console.log("<= Received doc is NOT a code document.", results.data);
+                this.quillRef.setContents(results.data, "api");
                 this.quillRef.enable();
-
-                this.setState({ editData: this.quillRef.root.innerHTML }); // for print to work without changes made
-
+                this.setState({ editData: this.quillRef.root.innerHTML }); // for print to work without changes made´
                 this.socket.emit("get-document", docid);
                 this.receiveChanges();
                 this.autoSave(); // Setup autosave
                 this.hideAlert();
-            })
-            .catch((error) => {
-                console.error("Error getting doc!", error);
-                this.refreshAccessToken(true);
-            });
+            }
+        }
     };
 
-    createDocument = async (name, e = null) => {
+    createDocument = async (name, type, e = null) => {
         if (e) e.preventDefault();
         if (this.state.username == null) return;
         // Add any additional users if given
@@ -382,7 +389,7 @@ class Editor extends Component {
             users = users.concat(this.state.allowedUsers);
         }
 
-        let results = await db.createDocument(this.state.apollo, name, users);
+        let results = await db.createDocument(this.state.apollo, name, users, type);
         if (results) {
             this.openDocument(results);
         }
@@ -450,6 +457,13 @@ class Editor extends Component {
         console.log("Data:", this.state.editData);
     };
 
+    handleCMChange = (data) => {
+        if (this.socket == null || !this.state.codeMode) return;
+        this.setState({ editData: data, userChanged: true });
+        //this.socket.emit("send-changes", delta);
+        //this.timeSinceEdit = Date.now(); // set timer to last edit
+    };
+
     handleChange = (html, delta, source, editor) => {
         // Making sure socket and Quill are attached
         if (this.socket == null || this.quillRef == null) return;
@@ -513,6 +527,8 @@ class Editor extends Component {
             showComments,
             comments,
             toastContent,
+            codeMode,
+            newDocType,
         } = this.state;
 
         if (error) {
@@ -536,7 +552,7 @@ class Editor extends Component {
                     username={username}
                     logout={auth.logout}
                     pdf={(e) => this.handlePDF(e)}
-                    comment={(e) => this.handleComment(e)}
+                    comment={(e) => this.handleAddComment(e)}
                 />
 
                 {showComments ? (
@@ -545,14 +561,18 @@ class Editor extends Component {
 
                 <main className="editor">
                     <Container>
-                        <ReactQuill
-                            ref={(el) => (this.reactQuillRef = el)}
-                            theme={"snow"}
-                            modules={this.modules}
-                            formats={this.formats}
-                            value={editData}
-                            onChange={this.handleChange}
-                        />
+                        {codeMode ? (
+                            <CodeEditor value={editData} onChange={this.handleCMChange} />
+                        ) : (
+                            <ReactQuill
+                                ref={(el) => (this.reactQuillRef = el)}
+                                theme={"snow"}
+                                modules={this.modules}
+                                formats={this.formats}
+                                value={editData}
+                                onChange={this.handleChange}
+                            />
+                        )}
                     </Container>
 
                     <Notification
@@ -619,12 +639,30 @@ class Editor extends Component {
                                     onChange={(e) => this.handleUsersInput(e.target.value)}
                                 />
                             </InputGroup>
+                            <br />
+                            <h6 style={{ display: "inline" }}>Document Type: </h6>
+                            <ButtonGroup>
+                                {this.docTypes.map((radio, idx) => (
+                                    <ToggleButton
+                                        key={idx}
+                                        id={`radio-${idx}`}
+                                        type="radio"
+                                        variant={idx % 2 ? "outline-success" : "outline-primary"}
+                                        name="radio"
+                                        value={radio.value}
+                                        checked={newDocType === radio.value}
+                                        onChange={(e) => this.setState({ newDocType: e.currentTarget.value })}
+                                    >
+                                        {radio.name}
+                                    </ToggleButton>
+                                ))}
+                            </ButtonGroup>
                         </Modal.Body>
                         <Modal.Footer>
                             <Button
                                 variant="primary"
                                 onClick={(e) => {
-                                    this.createDocument(newDocName, e);
+                                    this.createDocument(newDocName, newDocType, e);
                                     this.hideNewModal();
                                 }}
                             >

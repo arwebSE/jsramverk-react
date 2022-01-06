@@ -5,8 +5,7 @@ if (process.env.NODE_ENV === "development") {
     console.log("=> Dev Mode!");
     apiUrl = "http://localhost:1337";
 } else {
-    apiUrl = "https://jsramverk-editor-auro17.azurewebsites.net";
-    //apiUrl = "https://jsramverk-api.arwebse.repl.co";
+    apiUrl = process.env.API_URL;
 }
 const TOKEN_INTERVAL = 250000;
 
