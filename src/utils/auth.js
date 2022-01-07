@@ -1,11 +1,9 @@
-require("dotenv").config();
-
 let apiUrl;
 if (process.env.NODE_ENV === "development") {
     console.log("=> Dev Mode!");
     apiUrl = "http://localhost:1337";
 } else {
-    apiUrl = process.env.API_URL;
+    apiUrl = process.env.REACT_APP_API_URL;
 }
 const TOKEN_INTERVAL = 250000;
 

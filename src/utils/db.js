@@ -1,14 +1,13 @@
 import { ApolloClient, InMemoryCache, createHttpLink } from "@apollo/client";
 import { setContext } from "@apollo/client/link/context";
 import * as queries from "../graphql/queries";
-require("dotenv").config();
 
 let apiUrl;
 if (process.env.NODE_ENV === "development") {
     console.log("=> Dev Mode!");
     apiUrl = "http://localhost:1337";
 } else {
-    apiUrl = process.env.API_URL;
+    apiUrl = process.env.REACT_APP_API_URL;
 }
 
 const initApollo = async (accessToken) => {

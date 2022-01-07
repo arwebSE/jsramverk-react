@@ -30,12 +30,15 @@ export default function Header(props) {
                                         <Dropdown.Item onClick={props.save}>Save</Dropdown.Item>
                                         <NavDropdown.Divider />
                                         <Dropdown.Item onClick={props.pdf}>Download PDF</Dropdown.Item>
+                                        {props.codeMode && (
+                                            <Dropdown.Item onClick={props.execjs}>Execute JS Code</Dropdown.Item>
+                                        )}
                                     </DropdownButton>
                                     <DropdownButton title="Edit" variant="primary">
                                         <Dropdown.Item onClick={props.comment}>Add Comment</Dropdown.Item>
                                         <Dropdown.Item onClick={props.changeMode}>
-                                            {props.codeMode === "code" && "Change to TextMode"}
-                                            {props.codeMode !== "code" && "Change to CodeMode"}
+                                            {props.codeMode && "Change to TextMode"}
+                                            {!props.codeMode && "Change to CodeMode"}
                                         </Dropdown.Item>
                                     </DropdownButton>
                                     <DropdownButton title="View" variant="primary">

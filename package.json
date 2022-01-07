@@ -12,7 +12,6 @@
         "@testing-library/user-event": "^12.1.10",
         "bootstrap": "5.1.1",
         "codemirror": "^5.65.0",
-        "dotenv": "^10.0.0",
         "file-saver": "^2.0.5",
         "formik": "^2.2.9",
         "graphql": "^16.1.0",

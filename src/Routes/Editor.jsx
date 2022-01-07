@@ -29,14 +29,12 @@ import Notification from "../components/Notification";
 import * as auth from "../utils/auth.js";
 import * as db from "../utils/db.js";
 
-require("dotenv").config();
-
 let apiUrl;
 if (process.env.NODE_ENV === "development") {
     console.log("=> Dev Mode!");
     apiUrl = "http://localhost:1337";
 } else {
-    apiUrl = process.env.API_URL;
+    apiUrl = process.env.REACT_APP_API_URL;
 }
 const SAVE_INTERVAL = 10000;
 const TOKEN_INTERVAL = 250000; // 300k = 5min
@@ -57,11 +55,14 @@ class Editor extends Component {
             newModalShown: false,
             editData: "",
             newDocName: null,
+            newDocType: "text",
             alertShown: false,
+            alertVariant: "primary",
+            alertContent: "",
             docid: props.match.params.id,
             userChanged: false,
-            alertContent: "",
             toastShow: false,
+            toastContent: "",
             username: null,
             accessToken: null,
             refreshToken: null,
@@ -69,9 +70,7 @@ class Editor extends Component {
             apollo: null,
             comments: [],
             showComments: false,
-            toastContent: "",
             codeMode: false,
-            newDocType: "text",
             codeMirror: null, // CodeMirror instance
         };
     }
@@ -218,6 +217,27 @@ class Editor extends Component {
         }
         return;
     }
+
+    executeJS = () => {
+        let data = { code: btoa(this.state.editData) };
+
+        fetch(`${process.env.REACT_APP_EXEC_URL}`, {
+            body: JSON.stringify(data),
+            headers: { "content-type": "application/json" },
+            method: "POST",
+        })
+            .then((response) => {
+                return response.json();
+            })
+            .then((result) => {
+                let results = atob(result.data);
+                console.log("<= Received execJS results:", results);
+                this.showAlert(`🧾ExecJS Results: 👉 ${results}`, "success");
+            })
+            .catch((err) => {
+                this.showAlert(`Could not execute! Error: ${err}`, "danger");
+            });
+    };
 
     handleAddComment = async (e = null) => {
         if (e) e.preventDefault();
@@ -544,8 +564,8 @@ class Editor extends Component {
     hideNewModal = () => {
         this.setState({ newModalShown: false });
     };
-    showAlert = (content) => {
-        this.setState({ alertShown: true, alertContent: content });
+    showAlert = (content, variant = "primary") => {
+        this.setState({ alertShown: true, alertContent: content, alertVariant: variant });
     };
     hideAlert = () => {
         this.setState({ alertShown: false });
@@ -570,6 +590,7 @@ class Editor extends Component {
             toastContent,
             codeMode,
             newDocType,
+            alertVariant,
         } = this.state;
 
         if (error) {
@@ -578,7 +599,7 @@ class Editor extends Component {
 
         return (
             <>
-                <Alert variant="primary" show={alertShown} onClose={this.hideAlert} dismissible>
+                <Alert variant={alertVariant} show={alertShown} onClose={this.hideAlert} dismissible>
                     {alertContent}
                 </Alert>
 
@@ -596,6 +617,7 @@ class Editor extends Component {
                     comment={(e) => this.handleAddComment(e)}
                     changeMode={(e) => this.changeEditMode(e)}
                     codeMode={codeMode}
+                    execjs={() => this.executeJS()}
                 />
 
                 {showComments ? (

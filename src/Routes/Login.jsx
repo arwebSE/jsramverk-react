@@ -12,7 +12,7 @@ if (process.env.NODE_ENV === "development") {
     console.log("=> Dev Mode!");
     apiUrl = "http://localhost:1337";
 } else {
-    apiUrl = process.env.API_URL;
+    apiUrl = process.env.REACT_APP_API_URL;
 }
 
 export default class Login extends React.Component {
