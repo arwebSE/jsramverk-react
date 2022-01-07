@@ -1,8 +1,12 @@
 import React, { Component } from "react";
 import ReactQuill from "react-quill";
+import "react-quill/dist/quill.snow.css";
+import { Controlled as ReactCodeMirror } from "react-codemirror2";
+import "codemirror/lib/codemirror.css";
+import "codemirror/theme/material.css";
+import "codemirror/mode/javascript/javascript.js";
 import Header from "../layout/Header";
 import Footer from "../layout/Footer";
-import "react-quill/dist/quill.snow.css";
 import "../styles/editor.scss";
 import {
     Modal,
@@ -22,7 +26,6 @@ import { saveAs } from "file-saver";
 import { pdfExporter } from "quill-to-pdf";
 import Comments from "../components/Comments";
 import Notification from "../components/Notification";
-import CodeEditor from "../components/CodeEditor";
 import * as auth from "../utils/auth.js";
 import * as db from "../utils/db.js";
 
@@ -69,6 +72,7 @@ class Editor extends Component {
             toastContent: "",
             codeMode: false,
             newDocType: "text",
+            codeMirror: null, // CodeMirror instance
         };
     }
 
@@ -173,12 +177,51 @@ class Editor extends Component {
         this.setState({ apollo }); // Store apollo ref in state var
     };
 
-    handleAddComment = (e = null) => {
-        if (e) e.preventDefault();
-        if (this.quillRef == null || this.state.docid === undefined) {
-            console.log("=> Comment: Couldn't make comment. quillref:", this.quillRef, "docid:", this.state.docid);
-            return;
+    setStateAsync(state) {
+        return new Promise((resolve) => {
+            this.setState(state, resolve);
+        });
+    }
+
+    docidExists = (docs, docid) => {
+        return docs.some(function (el) {
+            return el._id === docid;
+        });
+    };
+
+    handleUsersInput = (values) => {
+        let arr = values.split(",").map(function (item) {
+            return item.trim();
+        });
+        this.setState({ allowedUsers: arr });
+    };
+
+    attachQuillRefs = () => {
+        if (typeof this.reactQuillRef.getEditor !== "function") return;
+        this.quillRef = this.reactQuillRef.getEditor();
+    };
+
+    checkNull(name, option) {
+        const codeMode = this.state.codeMode;
+        const codeMirror = this.state.codeMirror;
+        const quillRef = this.quillRef;
+        const docid = this.state.docid;
+        const socket = this.socket;
+        if (docid === undefined) {
+            console.log(`${name} aborted! docid:${docid}`);
+        } else if ((codeMode && codeMirror === null) || (!codeMode && quillRef == null)) {
+            console.log(`${name} aborted! codeMode:${codeMode} codeMirror:${codeMirror} quillRef:${quillRef}`);
+        } else if (option === "socket" && socket === null) {
+            console.log(`${name} aborted! socket:${socket}`);
+        } else {
+            return true;
         }
+        return;
+    }
+
+    handleAddComment = async (e = null) => {
+        if (e) e.preventDefault();
+        if (!this.checkNull("AddComment")) return;
         let prompt = window.prompt("Enter comment text:", "");
         let comments = [];
         if (prompt == null || prompt === "") {
@@ -202,7 +245,7 @@ class Editor extends Component {
                         comments = this.state.comments.concat(comments);
                     }
 
-                    this.setState({ comments }); // save changes to state
+                    await this.setStateAsync({ comments }); // wait until stored
                     this.setState({ showComments: true });
                     this.saveDocument();
                 }
@@ -227,27 +270,29 @@ class Editor extends Component {
 
     handlePDF = async (e = null) => {
         if (e) e.preventDefault();
-        if (this.quillRef == null || this.state.docid === undefined) {
-            console.log("=> Couldn't make PDF. quillref:", this.quillRef, "docid:", this.state.docid);
-            return;
-        }
-        const delta = this.quillRef.getContents();
-        const pdfAsBlob = await pdfExporter.generatePdf(delta); // converts to PDF
+        if (!this.checkNull("PDF")) return;
+
+        const data = this.quillRef.getContents();
+        const pdfAsBlob = await pdfExporter.generatePdf(data); // converts to PDF
         saveAs(pdfAsBlob, "pdf-export.pdf"); // downloads from the browser
     };
 
-    handleUsersInput = (values) => {
-        let arr = values.split(",").map(function (item) {
-            return item.trim();
-        });
-        this.setState({ allowedUsers: arr });
+    changeEditMode = async (e = null) => {
+        if (e) e.preventDefault();
+        console.log("=> Changed codeMode to:", !this.state.codeMode);
+        const codeMode = this.state.codeMode;
+        if (codeMode) {
+            this.setState({ codeMode: false });
+        } else {
+            this.setState({ codeMode: true });
+        }
     };
 
     isLoggedIn = async () => {
         console.log("=> Stored username:", localStorage.getItem("username"));
         let loginData = auth.getLogin();
         if (loginData) {
-            console.log("Logged in as:", loginData.username);
+            console.log("=> Logged in as:", loginData.username);
             this.setState({
                 username: loginData.username,
                 accessToken: loginData.accessToken,
@@ -256,12 +301,6 @@ class Editor extends Component {
             return true;
         }
         return;
-    };
-
-    docidExists = (docs, docid) => {
-        return docs.some(function (el) {
-            return el._id === docid;
-        });
     };
 
     firstFetch = async (docslist = null) => {
@@ -295,7 +334,6 @@ class Editor extends Component {
     listDocuments = async () => {
         console.log("=> Calling listUserDocs...");
         let userdocs = await db.listUserDocs(this.state.apollo, this.state.username);
-        console.log("userdocs", userdocs);
         if (userdocs) {
             this.setState({ documents: userdocs, apiLoaded: true });
             this.firstFetch(userdocs); // callback
@@ -304,7 +342,6 @@ class Editor extends Component {
 
             if (await auth.refreshAccessToken()) {
                 userdocs = await db.listUserDocs(this.state.apollo, this.state.username);
-                console.log("userdocs", userdocs);
                 if (userdocs) {
                     this.setState({ documents: userdocs, apiLoaded: true });
                     this.firstFetch(userdocs); // callback
@@ -316,31 +353,27 @@ class Editor extends Component {
         }
     };
 
-    attachQuillRefs = () => {
-        if (typeof this.reactQuillRef.getEditor !== "function") return;
-        this.quillRef = this.reactQuillRef.getEditor();
-    };
-
     receiveChanges() {
         console.log("=> Receive changes called.");
-        if (this.socket == null || this.quillRef == null) return;
+        if (!this.checkNull("ReceiveChanges", "socket")) return;
+
         console.log("=> Now accepting realtime changes!");
-        this.socket.once("receive-changes", (delta) => {
-            // DEBUG
-            console.log("<= Received changes!", delta);
+        this.socket.once("receive-changes", (data) => {
+            console.log("<= Received changes!", data); // DEBUG
         });
-        this.socket.on("receive-changes", (delta) => {
-            this.quillRef.updateContents(delta);
+        this.socket.on("receive-changes", (data) => {
+            if (this.state.codeMode) {
+                this.state.codeMirror.getDoc().setValue(data);
+            } else {
+                this.quillRef.updateContents(data);
+            }
         });
         this.setState({ userChanged: false });
     }
 
     openDocument = async (docid, e = null) => {
         if (e) e.preventDefault();
-        if (this.socket == null || (this.quillRef == null && !this.state.codeMode)) {
-            console.log("=> warning! aborded load. socket:", this.socket, "and codemode:", this.state.codemode);
-            return;
-        }
+        if (!this.checkNull("OpenDocument", "socket")) return;
         if (docid !== this.props.match.params.id) {
             // if on wrong url
             console.log("=> Redirecting to correct url");
@@ -363,9 +396,11 @@ class Editor extends Component {
 
             if (results.type === "code") {
                 console.log("<= Received doc IS a CODE document!");
-                // do something special
                 this.setState({ codeMode: true });
                 this.setState({ editData: results.data });
+                //this.socket.emit("get-document", docid);
+                //this.receiveChanges();
+                this.autoSave(); // Setup autosave
                 this.hideAlert();
             } else {
                 console.log("<= Received doc is NOT a code document.", results.data);
@@ -396,27 +431,30 @@ class Editor extends Component {
         this.hideNewModal();
     };
 
-    saveDocument = (e = null) => {
+    saveDocument = async (e = null) => {
         if (e) e.preventDefault();
-        if (this.quillRef == null || this.state.docid === undefined) {
-            console.log("=> Couldn't save. quillref:", this.quillRef, "docid:", this.state.docid);
-            return;
-        }
+        if (this.state.docid === undefined) return;
+        let data = "";
+        if (this.state.codeMode) {
+            if (this.state.codeMirror == null) {
+                console.log("=> Couldn't save. cmref:", this.state.codeMirror);
+                return;
+            }
+            data = this.state.codeMirror.doc.getValue();
+        } else {
+            if (this.quillRef == null) {
+                console.log("=> Couldn't save. quillref:", this.quillRef, "docid:", this.state.docid);
+                return;
+            }
 
-        const data = JSON.stringify(this.quillRef.getContents());
+            data = JSON.stringify(this.quillRef.getContents());
+        }
         const comments = this.state.comments.map((comment) => (comment = JSON.stringify(comment)));
-        this.state.apollo
-            .mutate({
-                mutation: queries.UPDATE_DOCUMENT,
-                variables: { docid: this.state.docid, data, comments },
-            })
-            .then((result) => {
-                console.log("=> Saved! data:", this.quillRef.getContents(), "comments:", this.state.comments);
-                this.setState({ toastShow: true, toastContent: "The document was saved." });
-            })
-            .catch((error) => {
-                console.error("Error saving doc!", error);
-            });
+        console.log("saving:", data, comments, this.state.comments);
+        let codeMode = "text";
+        if (this.state.codeMode) codeMode = "code";
+        const results = await db.saveDocument(this.state.apollo, this.state.docid, data, comments, codeMode);
+        if (results) this.setState({ toastShow: true, toastContent: "The document was saved." });
     };
 
     autoSave = () => {
@@ -457,14 +495,17 @@ class Editor extends Component {
         console.log("Data:", this.state.editData);
     };
 
-    handleCMChange = (data) => {
-        if (this.socket == null || !this.state.codeMode) return;
-        this.setState({ editData: data, userChanged: true });
-        //this.socket.emit("send-changes", delta);
-        //this.timeSinceEdit = Date.now(); // set timer to last edit
+    handleCMChange = (editor, data, value) => {
+        if (!this.state.codeMode) {
+            console.log("=> Error! Can't change. CodeMode:", this.state.codeMode);
+            return;
+        }
+        this.setState({ editData: value, userChanged: true });
+        //this.socket.emit("send-changes", value);
+        this.timeSinceEdit = Date.now(); // set timer to last edit
     };
 
-    handleChange = (html, delta, source, editor) => {
+    handleQuillChange = (html, delta, source, editor) => {
         // Making sure socket and Quill are attached
         if (this.socket == null || this.quillRef == null) return;
         if (source !== "user") return; // Prevent changes not made by user
@@ -553,6 +594,8 @@ class Editor extends Component {
                     logout={auth.logout}
                     pdf={(e) => this.handlePDF(e)}
                     comment={(e) => this.handleAddComment(e)}
+                    changeMode={(e) => this.changeEditMode(e)}
+                    codeMode={codeMode}
                 />
 
                 {showComments ? (
@@ -562,7 +605,19 @@ class Editor extends Component {
                 <main className="editor">
                     <Container>
                         {codeMode ? (
-                            <CodeEditor value={editData} onChange={this.handleCMChange} />
+                            <ReactCodeMirror
+                                options={{
+                                    lineWrapping: true,
+                                    lint: true,
+                                    mode: "javascript",
+                                    lineNumbers: true,
+                                    theme: "material",
+                                }}
+                                value={editData}
+                                onBeforeChange={(editor, data, value) => this.handleCMChange(editor, data, value)}
+                                editorDidMount={(editor) => this.setState({ codeMirror: editor })}
+                                className="cmWrapper"
+                            />
                         ) : (
                             <ReactQuill
                                 ref={(el) => (this.reactQuillRef = el)}
@@ -570,7 +625,7 @@ class Editor extends Component {
                                 modules={this.modules}
                                 formats={this.formats}
                                 value={editData}
-                                onChange={this.handleChange}
+                                onChange={this.handleQuillChange}
                             />
                         )}
                     </Container>

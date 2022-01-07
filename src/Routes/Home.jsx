@@ -355,6 +355,7 @@ export default class Home extends Component {
                         handleRadio={this.handleNewDocRadio}
                         handleName={this.handleNewDocName}
                         radioValue={this.state.newDocType}
+                        close={() => this.hideNewModal()}
                     />
                 </main>
 

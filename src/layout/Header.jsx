@@ -33,6 +33,10 @@ export default function Header(props) {
                                     </DropdownButton>
                                     <DropdownButton title="Edit" variant="primary">
                                         <Dropdown.Item onClick={props.comment}>Add Comment</Dropdown.Item>
+                                        <Dropdown.Item onClick={props.changeMode}>
+                                            {props.codeMode === "code" && "Change to TextMode"}
+                                            {props.codeMode !== "code" && "Change to CodeMode"}
+                                        </Dropdown.Item>
                                     </DropdownButton>
                                     <DropdownButton title="View" variant="primary">
                                         <Dropdown.Item onClick={props.print}>Print to Console</Dropdown.Item>

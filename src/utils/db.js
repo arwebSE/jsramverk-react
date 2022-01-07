@@ -102,10 +102,16 @@ const openDocument = async (apolloRef, docid) => {
                 variables: { docid },
             })
             .then((result) => {
-                const results = result.data.openDoc;
-                const data = JSON.parse(results.data);
-                const comments = results.comments;
                 console.log("<= Response to openDoc query:", result);
+                const results = result.data.openDoc;
+                let data;
+                if (results.type === "code") {
+                    data = results.data;
+                } else {
+                    data = JSON.parse(results.data);
+                }
+                
+                const comments = results.comments;
 
                 let doc = {};
                 for (var k in results) doc[k] = results[k];
@@ -134,4 +140,25 @@ const openDocument = async (apolloRef, docid) => {
     return;
 };
 
-export { initApollo, listUserDocs, createDocument, deleteDocument, openDocument };
+const saveDocument = async (apolloRef, docid, data, comments, type) => {
+    console.log("=> Requesting to open doc:", docid);
+    if (apolloRef) {
+        return apolloRef
+            .mutate({
+                mutation: queries.UPDATE_DOCUMENT,
+                variables: { docid, data, comments, type },
+            })
+            .then((result) => {
+                const results = result.data.updateDoc;
+                console.log("<= Response to updateDoc query:", results);
+                return true;
+            })
+            .catch((error) => {
+                console.error("Error saving doc!", error);
+                return;
+            });
+    }
+    return;
+};
+
+export { initApollo, listUserDocs, createDocument, deleteDocument, openDocument, saveDocument };

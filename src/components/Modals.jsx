@@ -5,19 +5,10 @@ export default class Modals extends Component {
     constructor(props) {
         super(props);
         this.state = {
-            newModalShown: false,
             newDocName: null,
             newDocType: "text",
         };
     }
-
-    hideNewModal = () => {
-        this.setState({ newModalShown: false });
-    };
-
-    showNewModal = () => {
-        this.setState({ newModalShown: true });
-    };
 
     docTypes = [
         { name: "Text", value: "text" },
@@ -76,12 +67,11 @@ export default class Modals extends Component {
                                 variant="primary"
                                 onClick={(e) => {
                                     this.props.createDocument(this.state.newDocName, this.state.newDocType, e);
-                                    this.hideNewModal();
                                 }}
                             >
                                 Save
                             </Button>
-                            <Button variant="secondary" onClick={this.hideNewModal}>
+                            <Button variant="secondary" onClick={this.props.close}>
                                 Close
                             </Button>
                         </Modal.Footer>
