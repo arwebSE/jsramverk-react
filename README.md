@@ -35,7 +35,7 @@ See the section about [deployment](https://facebook.github.io/create-react-app/d
 Runs `yarn build` and deploys to student server.
 
 
-### `yarn justsend`
+### `yarn upload`
 
 Deploys to student server without building first.
 
