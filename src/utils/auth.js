@@ -12,7 +12,7 @@ const getLogin = () => {
     console.log("=> Stored username:", username);
     if (username === null) {
         console.log("Couldn't get username from localStorage. Redirecting back to login...", username);
-        window.location.href = "/#login";
+        window.location.href = "#login";
     } else {
         // UNSECURE
         const data = {
@@ -97,7 +97,7 @@ const logout = async () => {
     console.log("Deleting LocalStorage...");
     localStorage.clear();
     console.log("Navigating to logout page...");
-    window.location.href = "/#logout";
+    window.location.href = "#logout";
 };
 
 export { getLogin, autoRefreshToken, refreshAccessToken, logout };

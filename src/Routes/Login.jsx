@@ -52,7 +52,7 @@ export default class Login extends React.Component {
                 localStorage.setItem("username", values.username);
                 localStorage.setItem("accessToken", data.accessToken);
                 localStorage.setItem("refreshToken", data.refreshToken);
-                this.props.history.push({ pathname: "/#home" });
+                this.props.history.push({ pathname: "#home" });
             })
             .catch((error) => {
                 console.error("Error logging in!", error);

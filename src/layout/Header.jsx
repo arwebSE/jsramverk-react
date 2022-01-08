@@ -8,7 +8,7 @@ export default function Header(props) {
         <header className="header">
             <Navbar bg="dark" variant="dark" className="toolbar">
                 <Container>
-                    <Navbar.Brand href="/#home" className="justify-content-center">
+                    <Navbar.Brand href="#home" className="justify-content-center">
                         <img
                             src="logo.png"
                             width="30"
