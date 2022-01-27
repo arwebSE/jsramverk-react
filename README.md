@@ -1,4 +1,4 @@
-# AuroDocs React Client
+# AuroDocs React Client [![Build Status](https://app.travis-ci.com/arwebSE/jsramverk-react.svg?branch=main)](https://app.travis-ci.com/arwebSE/jsramverk-react)
 
 This client is currently hosted at: http://www.student.bth.se/~auro17/editor/
 
